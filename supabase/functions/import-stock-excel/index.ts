@@ -161,13 +161,14 @@ serve(async (req) => {
         }
 
         let articleId: string;
-        const existingArticleIdInDB = articleByCodeArticleMap.get(codeArticle);
-        const existingArticleInMap = articlesToUpsertMap.get(codeArticle);
+        // Prioritize lookup by code_barres_article if it's the unique key
+        const existingArticleIdByBarcodeInDB = articleByCodeBarresArticleMap.get(codeBarresArticle);
+        const existingArticleInMapByBarcode = articlesToUpsertMap.get(codeBarresArticle); // Use barcode as key for map too
 
-        if (existingArticleInMap) {
-            articleId = existingArticleInMap.id;
-        } else if (existingArticleIdInDB) {
-            articleId = existingArticleIdInDB;
+        if (existingArticleInMapByBarcode) {
+            articleId = existingArticleInMapByBarcode.id;
+        } else if (existingArticleIdByBarcodeInDB) {
+            articleId = existingArticleIdByBarcodeInDB;
         } else {
             articleId = crypto.randomUUID();
         }
@@ -182,8 +183,9 @@ serve(async (req) => {
           coloris: colorisArticle,
           code_barres_article: codeBarresArticle,
         };
-        articlesToUpsertMap.set(codeArticle, articlePayload);
-        articleByCodeArticleMap.set(codeArticle, articleId);
+        // Use code_barres_article as the primary key for articlesToUpsertMap
+        articlesToUpsertMap.set(codeBarresArticle, articlePayload);
+        articleByCodeArticleMap.set(codeArticle, articleId); // Keep for other lookups if needed
         articleByCodeBarresArticleMap.set(codeBarresArticle, articleId);
 
 
@@ -238,7 +240,7 @@ serve(async (req) => {
     if (articlesToUpsert.length > 0) {
       const { error: upsertError } = await supabaseClient
         .from('articles')
-        .upsert(articlesToUpsert, { onConflict: 'code_article' });
+        .upsert(articlesToUpsert, { onConflict: 'code_barres_article' }); // CHANGED: Use code_barres_article for conflict resolution
       if (upsertError) throw upsertError;
     }
 
