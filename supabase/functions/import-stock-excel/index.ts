@@ -76,8 +76,33 @@ serve(async (req) => {
         const stockMax = parseInt(row['Stock maximum']);
         const stockMin = parseInt(row['Stock minimum']);
 
-        if (!depotNom || !categoriePrincipaleNom || !codeArticle || !libelleArticle || isNaN(stockActuel) || isNaN(stockMin) || isNaN(stockMax)) {
-          errors.push({ row, message: 'Missing required data or invalid numbers for stock' });
+        // Validation plus spécifique
+        if (!depotNom) {
+          errors.push({ row, message: 'Missing Dépôt name' });
+          continue;
+        }
+        if (!categoriePrincipaleNom) {
+          errors.push({ row, message: 'Missing CATEGORIE PRINCIPALE' });
+          continue;
+        }
+        if (!codeArticle) {
+          errors.push({ row, message: 'Missing Code article' });
+          continue;
+        }
+        if (!libelleArticle) {
+          errors.push({ row, message: 'Missing Libellé article' });
+          continue;
+        }
+        if (isNaN(stockActuel)) {
+          errors.push({ row, message: 'Invalid or missing Physique stock (must be a number)' });
+          continue;
+        }
+        if (isNaN(stockMin)) {
+          errors.push({ row, message: 'Invalid or missing Stock minimum (must be a number)' });
+          continue;
+        }
+        if (isNaN(stockMax)) {
+          errors.push({ row, message: 'Invalid or missing Stock maximum (must be a number)' });
           continue;
         }
 
@@ -85,10 +110,9 @@ serve(async (req) => {
         if (boutiqueMap.has(depotNom)) {
           boutiqueId = boutiqueMap.get(depotNom)!;
         } else {
-          // Ajouter à la liste d'insertion et au cache pour les lignes suivantes
-          const newBoutiqueId = crypto.randomUUID(); // Générer un UUID côté fonction
+          const newBoutiqueId = crypto.randomUUID();
           boutiquesToInsert.push({ id: newBoutiqueId, nom: depotNom });
-          boutiqueMap.set(depotNom, newBoutiqueId); // Mettre à jour la map pour les lignes suivantes du même fichier
+          boutiqueMap.set(depotNom, newBoutiqueId);
           boutiqueId = newBoutiqueId;
         }
 
@@ -118,9 +142,8 @@ serve(async (req) => {
         let articleId: string;
         if (articleMap.has(codeArticle)) {
           articleId = articleMap.get(codeArticle)!;
-          // Si l'article existe, nous voulons le mettre à jour avec les dernières infos
           articlesToUpsert.push({
-            id: articleId, // ID existant
+            id: articleId,
             code_article: codeArticle,
             libelle: libelleArticle,
             famille_id: familleId,
@@ -132,7 +155,7 @@ serve(async (req) => {
         } else {
           const newArticleId = crypto.randomUUID();
           articlesToUpsert.push({
-            id: newArticleId, // Nouvel ID
+            id: newArticleId,
             code_article: codeArticle,
             libelle: libelleArticle,
             famille_id: familleId,
@@ -141,7 +164,7 @@ serve(async (req) => {
             coloris: colorisArticle,
             code_barres_article: codeBarresArticle,
           });
-          articleMap.set(codeArticle, newArticleId); // Mettre à jour la map pour les lignes suivantes du même fichier
+          articleMap.set(codeArticle, newArticleId);
           articleId = newArticleId;
         }
 
@@ -175,7 +198,6 @@ serve(async (req) => {
 
     // --- 2. Exécution des opérations groupées ---
 
-    // Insérer les nouvelles boutiques, familles, sous-familles
     if (boutiquesToInsert.length > 0) {
       const { error: insertError } = await supabaseClient.from('boutiques').insert(boutiquesToInsert);
       if (insertError) throw insertError;
@@ -189,7 +211,6 @@ serve(async (req) => {
       if (insertError) throw insertError;
     }
 
-    // Upsert articles (insert ou update si code_article existe)
     if (articlesToUpsert.length > 0) {
       const { error: upsertError } = await supabaseClient
         .from('articles')
@@ -197,7 +218,6 @@ serve(async (req) => {
       if (upsertError) throw upsertError;
     }
 
-    // Upsert stock
     if (stockToUpsert.length > 0) {
       const { error: upsertError } = await supabaseClient
         .from('stock')
@@ -205,7 +225,6 @@ serve(async (req) => {
       if (upsertError) throw upsertError;
     }
 
-    // Upsert ventes
     if (ventesToUpsert.length > 0) {
       const { error: upsertError } = await supabaseClient
         .from('ventes')
