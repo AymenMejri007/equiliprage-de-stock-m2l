@@ -129,7 +129,7 @@ serve(async (req) => {
         subFamilyAnalysis[sousFamilleId].boutiques[boutiqueId].totalItems++;
         if (status === 'surstock') subFamilyAnalysis[sousFamilleId].boutiques[boutiqueId].overstock++;
         else if (status === 'rupture') subFamilyAnalysis[sousFamilleId].boutiques[boutiqueId].rupture++;
-        else subFamilyAnalysis[sousFamilleId].boutiques[boutiqueId].normal++;
+        else familyAnalysis[familleId].boutiques[boutiqueId].normal++;
       }
 
       // Agrégation par Article
