@@ -60,17 +60,10 @@ serve(async (req) => {
     if (errSousFamilles) throw errSousFamilles;
     const sousFamilleMap = new Map(existingSousFamilles.map(sf => [`${sf.nom}-${sf.famille_id}`, sf.id]));
 
-    const { data: existingArticles, error: errArticles } = await supabaseClient.from('articles').select('id, code_article, code_barres_article');
-    if (errArticles) throw errArticles;
-    const articleByCodeArticleMap = new Map(existingArticles.map(a => [String(a.code_article || '').trim().toLowerCase(), a.id]));
-    const articleByCodeBarresArticleMap = new Map(existingArticles.map(a => [String(a.code_barres_article || '').trim().toLowerCase(), a.id]));
-
-
     // --- Collecteurs pour les opérations groupées (utilisent des Maps pour la déduplication) ---
     const boutiquesToInsert: { id: string, nom: string }[] = [];
     const famillesToInsert: { id: string, nom: string }[] = [];
     const sousFamillesToInsert: { id: string, nom: string, famille_id: string }[] = [];
-    const articlesToUpsertMap = new Map<string, any>();
     const stockToUpsertMap = new Map<string, any>();
     const ventesToUpsertMap = new Map<string, any>();
 
@@ -160,21 +153,19 @@ serve(async (req) => {
           }
         }
 
+        // --- Gestion manuelle de l'upsert pour les articles ---
         let articleId: string;
-        // Prioritize lookup by code_barres_article if it's the unique key
-        const existingArticleIdByBarcodeInDB = articleByCodeBarresArticleMap.get(codeBarresArticle);
-        const existingArticleInMapByBarcode = articlesToUpsertMap.get(codeBarresArticle); // Use barcode as key for map too
+        const { data: existingArticle, error: fetchArticleError } = await supabaseClient
+          .from('articles')
+          .select('id')
+          .eq('code_barres_article', codeBarresArticle)
+          .single();
 
-        if (existingArticleInMapByBarcode) {
-            articleId = existingArticleInMapByBarcode.id;
-        } else if (existingArticleIdByBarcodeInDB) {
-            articleId = existingArticleIdByBarcodeInDB;
-        } else {
-            articleId = crypto.randomUUID();
+        if (fetchArticleError && fetchArticleError.code !== 'PGRST116') { // PGRST116 means no rows found
+          throw fetchArticleError;
         }
 
         const articlePayload: any = {
-          id: articleId,
           code_article: codeArticle,
           libelle: libelleArticle,
           famille_id: familleId,
@@ -183,11 +174,22 @@ serve(async (req) => {
           coloris: colorisArticle,
           code_barres_article: codeBarresArticle,
         };
-        // Use code_barres_article as the primary key for articlesToUpsertMap
-        articlesToUpsertMap.set(codeBarresArticle, articlePayload);
-        articleByCodeArticleMap.set(codeArticle, articleId); // Keep for other lookups if needed
-        articleByCodeBarresArticleMap.set(codeBarresArticle, articleId);
 
+        if (existingArticle) {
+          articleId = existingArticle.id;
+          const { error: updateArticleError } = await supabaseClient
+            .from('articles')
+            .update(articlePayload)
+            .eq('id', articleId);
+          if (updateArticleError) throw updateArticleError;
+        } else {
+          articleId = crypto.randomUUID();
+          const { error: insertArticleError } = await supabaseClient
+            .from('articles')
+            .insert({ id: articleId, ...articlePayload });
+          if (insertArticleError) throw insertArticleError;
+        }
+        // --- Fin de la gestion manuelle de l'upsert pour les articles ---
 
         stockToUpsertMap.set(`${boutiqueId}-${articleId}`, {
           id_boutique: boutiqueId,
@@ -233,16 +235,8 @@ serve(async (req) => {
       if (insertError) throw insertError;
     }
 
-    const articlesToUpsert = Array.from(articlesToUpsertMap.values());
     const stockToUpsert = Array.from(stockToUpsertMap.values());
     const ventesToUpsert = Array.from(ventesToUpsertMap.values());
-
-    if (articlesToUpsert.length > 0) {
-      const { error: upsertError } = await supabaseClient
-        .from('articles')
-        .upsert(articlesToUpsert, { onConflict: 'code_barres_article' }); // CHANGED: Revert to column name
-      if (upsertError) throw upsertError;
-    }
 
     if (stockToUpsert.length > 0) {
       const { error: upsertError } = await supabaseClient
