@@ -18,6 +18,19 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
+    // Log the Content-Type header for debugging
+    const contentType = req.headers.get('Content-Type');
+    console.log('Received Content-Type:', contentType);
+
+    // Ensure Content-Type is multipart/form-data for formData parsing
+    // This check helps diagnose if the client is sending the wrong header
+    if (!contentType || !contentType.startsWith('multipart/form-data')) {
+      return new Response(JSON.stringify({ error: `Invalid Content-Type. Expected multipart/form-data, but received ${contentType}.` }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 400,
+      });
+    }
+
     const formData = await req.formData();
     const file = formData.get('excelFile') as File;
 
