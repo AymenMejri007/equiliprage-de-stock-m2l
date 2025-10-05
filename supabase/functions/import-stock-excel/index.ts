@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
-import { readXLSX, Workbook } from "https://deno.land/x/deno_excel@v0.1.0/mod.ts";
+import { readExcel, Workbook } from "https://deno.land/x/excel_reader@v0.0.1/mod.ts"; // Changement ici
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -29,7 +29,7 @@ serve(async (req) => {
     }
 
     const arrayBuffer = await file.arrayBuffer();
-    const workbook: Workbook = await readXLSX(arrayBuffer);
+    const workbook: Workbook = await readExcel(new Uint8Array(arrayBuffer)); // Utilisation de readExcel et conversion en Uint8Array
     const sheetName = workbook.SheetNames[0];
     const sheet = workbook.Sheets[sheetName];
 
