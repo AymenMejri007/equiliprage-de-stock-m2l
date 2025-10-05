@@ -49,15 +49,16 @@ serve(async (req) => {
     // Clé composite pour sous-familles: nom + famille_id
     const sousFamilleMap = new Map(existingSousFamilles.map(sf => [`${sf.nom}-${sf.famille_id}`, sf.id]));
 
-    const { data: existingArticles, error: errArticles } = await supabaseClient.from('articles').select('id, code_article');
+    // Charger les articles existants par code_barres_article
+    const { data: existingArticles, error: errArticles } = await supabaseClient.from('articles').select('id, code_barres_article');
     if (errArticles) throw errArticles;
-    const articleMap = new Map(existingArticles.map(a => [a.code_article, a.id]));
+    const articleMap = new Map(existingArticles.map(a => [a.code_barres_article, a.id]));
 
     // --- Collecteurs pour les opérations groupées ---
     const boutiquesToInsert: { id: string, nom: string }[] = [];
     const famillesToInsert: { id: string, nom: string }[] = [];
     const sousFamillesToInsert: { id: string, nom: string, famille_id: string }[] = [];
-    const articlesToUpsert: any[] = []; // Peut être upsert car code_article est unique
+    const articlesToUpsert: any[] = [];
     const stockToUpsert: any[] = [];
     const ventesToUpsert: any[] = [];
 
@@ -67,16 +68,16 @@ serve(async (req) => {
         const marqueArticle = row['MARQUE'];
         const categoriePrincipaleNom = row['CATEGORIE PRINCIPALE'];
         const sousCategorieNom = row['SOUS-CATEGORIE'];
-        const codeArticle = row['Code article'];
+        const codeArticle = row['Code article']; // Peut être null/undefined
         const libelleArticle = row['Libellé article'];
         const colorisArticle = row['Coloris'];
-        const codeBarresArticle = row['Code-barres article'];
+        const codeBarresArticle = row['Code-barres article']; // Doit être présent et unique
         const stockActuel = parseInt(row['Physique']);
         const ventesFO = parseInt(row['Ventes FO']);
         const stockMax = parseInt(row['Stock maximum']);
         const stockMin = parseInt(row['Stock minimum']);
 
-        // Validation plus spécifique
+        // Validation plus spécifique, en particulier pour codeBarresArticle
         if (!depotNom) {
           errors.push({ row, message: 'Missing Dépôt name' });
           continue;
@@ -85,8 +86,8 @@ serve(async (req) => {
           errors.push({ row, message: 'Missing CATEGORIE PRINCIPALE' });
           continue;
         }
-        if (!codeArticle) {
-          errors.push({ row, message: 'Missing Code article' });
+        if (!codeBarresArticle) {
+          errors.push({ row, message: 'Missing Code-barres article (mandatory)' });
           continue;
         }
         if (!libelleArticle) {
@@ -140,11 +141,11 @@ serve(async (req) => {
         }
 
         let articleId: string;
-        if (articleMap.has(codeArticle)) {
-          articleId = articleMap.get(codeArticle)!;
+        if (articleMap.has(codeBarresArticle)) {
+          articleId = articleMap.get(codeBarresArticle)!;
           articlesToUpsert.push({
             id: articleId,
-            code_article: codeArticle,
+            code_article: codeArticle || null, // Rendre nullable
             libelle: libelleArticle,
             famille_id: familleId,
             sous_famille_id: sousFamilleId,
@@ -156,7 +157,7 @@ serve(async (req) => {
           const newArticleId = crypto.randomUUID();
           articlesToUpsert.push({
             id: newArticleId,
-            code_article: codeArticle,
+            code_article: codeArticle || null, // Rendre nullable
             libelle: libelleArticle,
             famille_id: familleId,
             sous_famille_id: sousFamilleId,
@@ -164,7 +165,7 @@ serve(async (req) => {
             coloris: colorisArticle,
             code_barres_article: codeBarresArticle,
           });
-          articleMap.set(codeArticle, newArticleId);
+          articleMap.set(codeBarresArticle, newArticleId);
           articleId = newArticleId;
         }
 
@@ -214,7 +215,7 @@ serve(async (req) => {
     if (articlesToUpsert.length > 0) {
       const { error: upsertError } = await supabaseClient
         .from('articles')
-        .upsert(articlesToUpsert, { onConflict: 'code_article' });
+        .upsert(articlesToUpsert, { onConflict: 'code_barres_article' }); // Utiliser code_barres_article pour le conflit
       if (upsertError) throw upsertError;
     }
 
