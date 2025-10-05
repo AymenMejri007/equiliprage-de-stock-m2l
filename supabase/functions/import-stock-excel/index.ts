@@ -51,10 +51,10 @@ serve(async (req) => {
     // Clé composite pour sous-familles: nom + famille_id
     const sousFamilleMap = new Map(existingSousFamilles.map(sf => [`${sf.nom}-${sf.famille_id}`, sf.id]));
 
-    // Charger les articles existants par code_barres_article
+    // Charger les articles existants par code_barres_article, en nettoyant les valeurs
     const { data: existingArticles, error: errArticles } = await supabaseClient.from('articles').select('id, code_barres_article');
     if (errArticles) throw errArticles;
-    const articleMap = new Map(existingArticles.map(a => [a.code_barres_article, a.id]));
+    const articleMap = new Map(existingArticles.map(a => [String(a.code_barres_article).trim(), a.id]));
 
     // --- Collecteurs pour les opérations groupées ---
     const boutiquesToInsert: { id: string, nom: string }[] = [];
@@ -73,23 +73,26 @@ serve(async (req) => {
         const codeArticle = row['Code article']; // Peut être null/undefined
         const libelleArticle = row['Libellé article'];
         const colorisArticle = row['Coloris'];
-        const codeBarresArticle = row['Code-barres article']; // Doit être présent et unique
+        const codeBarresArticleRaw = row['Code-barres article']; // Valeur brute
         const stockActuel = parseInt(row['Physique']);
         const ventesFO = parseInt(row['Ventes FO']);
         const stockMax = parseInt(row['Stock maximum']);
         const stockMin = parseInt(row['Stock minimum']);
 
-        // Validation plus spécifique, en particulier pour codeBarresArticle
+        // Validation et nettoyage de codeBarresArticle
+        if (!codeBarresArticleRaw) {
+          errors.push({ row, message: 'Missing Code-barres article (mandatory)' });
+          continue;
+        }
+        const codeBarresArticle = String(codeBarresArticleRaw).trim(); // Nettoyage ici
+
+        // Validation plus spécifique
         if (!depotNom) {
           errors.push({ row, message: 'Missing Dépôt name' });
           continue;
         }
         if (!categoriePrincipaleNom) {
           errors.push({ row, message: 'Missing CATEGORIE PRINCIPALE' });
-          continue;
-        }
-        if (!codeBarresArticle) {
-          errors.push({ row, message: 'Missing Code-barres article (mandatory)' });
           continue;
         }
         if (!libelleArticle) {
@@ -143,7 +146,7 @@ serve(async (req) => {
         }
 
         let articleId: string;
-        const existingArticleId = articleMap.get(codeBarresArticle);
+        const existingArticleId = articleMap.get(codeBarresArticle); // Utilise la valeur nettoyée
 
         const articlePayload: any = {
           code_article: codeArticle || null, // Rendre nullable
@@ -152,19 +155,16 @@ serve(async (req) => {
           sous_famille_id: sousFamilleId,
           marque: marqueArticle,
           coloris: colorisArticle,
-          code_barres_article: codeBarresArticle,
+          code_barres_article: codeBarresArticle, // Utilise la valeur nettoyée
         };
 
         if (existingArticleId) {
           articleId = existingArticleId;
-          // Pour les articles existants, nous n'incluons pas l'ID dans le payload d'upsert.
-          // L'upsert se basera sur 'code_barres_article' pour trouver et mettre à jour la ligne existante,
-          // sans tenter de modifier son ID primaire.
           articlesToUpsert.push(articlePayload);
         } else {
           articleId = crypto.randomUUID();
           articlesToUpsert.push({
-            id: articleId, // L'ID est fourni uniquement pour les nouvelles insertions
+            id: articleId,
             ...articlePayload,
           });
           articleMap.set(codeBarresArticle, articleId); // Mettre à jour la map pour les lignes suivantes dans le même lot
@@ -172,7 +172,7 @@ serve(async (req) => {
 
         stockToUpsert.push({
           id_boutique: boutiqueId,
-          id_article: articleId, // Cet articleId est correctement résolu (existant ou nouveau)
+          id_article: articleId,
           stock_actuel: stockActuel,
           stock_min: stockMin,
           stock_max: stockMax,
@@ -216,7 +216,7 @@ serve(async (req) => {
     if (articlesToUpsert.length > 0) {
       const { error: upsertError } = await supabaseClient
         .from('articles')
-        .upsert(articlesToUpsert, { onConflict: 'code_barres_article' }); // Utiliser code_barres_article pour le conflit
+        .upsert(articlesToUpsert, { onConflict: 'code_barres_article' });
       if (upsertError) throw upsertError;
     }
 
@@ -244,7 +244,7 @@ serve(async (req) => {
     });
 
   } catch (error: any) {
-    console.error('Erreur dans la fonction Edge import-stock-excel:', error); // Log l'objet d'erreur complet
+    console.error('Erreur dans la fonction Edge import-stock-excel:', error);
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 500,
