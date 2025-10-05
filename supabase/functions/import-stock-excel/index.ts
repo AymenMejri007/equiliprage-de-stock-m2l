@@ -160,7 +160,10 @@ serve(async (req) => {
 
         if (existingArticleId) {
           articleId = existingArticleId;
-          articlesToUpsert.push(articlePayload);
+          articlesToUpsert.push({
+            id: articleId, // Inclure l'ID existant pour la mise à jour
+            ...articlePayload,
+          });
         } else {
           articleId = crypto.randomUUID();
           articlesToUpsert.push({
