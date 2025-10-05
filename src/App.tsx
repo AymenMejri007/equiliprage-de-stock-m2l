@@ -10,8 +10,10 @@ import Reports from "./pages/Reports";
 import BoutiqueDetail from "./pages/BoutiqueDetail";
 import GlobalStockList from "./pages/GlobalStockList";
 import ImportStock from "./pages/ImportStock";
-import StockBalancing from "./pages/StockBalancing"; // Importez la nouvelle page
+import StockBalancing from "./pages/StockBalancing";
+import Login from "./pages/Login"; // Importez la page de connexion
 import { AppLayout } from "./components/layout/AppLayout";
+import { SessionContextProvider } from "./components/auth/SessionContextProvider"; // Importez le contexte de session
 
 const queryClient = new QueryClient();
 
@@ -21,18 +23,21 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<AppLayout />}>
-            <Route index element={<Index />} />
-            <Route path="dashboard" element={<Dashboard />} />
-            <Route path="reports" element={<Reports />} />
-            <Route path="boutique-detail" element={<BoutiqueDetail />} />
-            <Route path="global-stock" element={<GlobalStockList />} />
-            <Route path="import-stock" element={<ImportStock />} />
-            <Route path="stock-balancing" element={<StockBalancing />} /> {/* Nouvelle route */}
-          </Route>
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+        <SessionContextProvider> {/* Enveloppez l'application avec le contexte de session */}
+          <Routes>
+            <Route path="/login" element={<Login />} /> {/* Route pour la page de connexion */}
+            <Route path="/" element={<AppLayout />}>
+              <Route index element={<Index />} />
+              <Route path="dashboard" element={<Dashboard />} />
+              <Route path="reports" element={<Reports />} />
+              <Route path="boutique-detail" element={<BoutiqueDetail />} />
+              <Route path="global-stock" element={<GlobalStockList />} />
+              <Route path="import-stock" element={<ImportStock />} />
+              <Route path="stock-balancing" element={<StockBalancing />} />
+            </Route>
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </SessionContextProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

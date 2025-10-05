@@ -1,10 +1,24 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { LayoutDashboard, FileText, Store, Upload } from 'lucide-react';
+import { useSession } from '@/components/auth/SessionContextProvider'; // Import du hook useSession
 
 const Index = () => {
+  const { session, isLoading } = useSession();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!isLoading && session) {
+      navigate('/dashboard');
+    }
+  }, [session, isLoading, navigate]);
+
+  if (isLoading || session) {
+    return null; // Ne rien afficher pendant le chargement ou si l'utilisateur est déjà connecté
+  }
+
   return (
     <div className="flex flex-col items-center justify-center h-full text-center p-4 md:p-8">
       <div className="max-w-3xl mx-auto mb-12">

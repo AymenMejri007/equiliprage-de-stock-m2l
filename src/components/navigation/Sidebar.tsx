@@ -1,10 +1,13 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { Home, LayoutDashboard, FileText, Store, List, Upload, Menu, GitCompareArrows } from 'lucide-react'; // Ajout de l'icône GitCompareArrows
+import { Home, LayoutDashboard, FileText, Store, List, Upload, Menu, GitCompareArrows, LogOut } from 'lucide-react'; // Ajout de l'icône LogOut
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useSession } from '@/components/auth/SessionContextProvider'; // Import du hook useSession
+import { supabase } from '@/integrations/supabase/client'; // Import du client Supabase
+import { showError, showSuccess } from '@/utils/toast';
 
 interface NavLinkItem {
   to: string;
@@ -19,28 +22,51 @@ const navLinks: NavLinkItem[] = [
   { to: "/boutique-detail", icon: Store, label: "Détail Boutique" },
   { to: "/global-stock", icon: List, label: "Stock Global" },
   { to: "/import-stock", icon: Upload, label: "Importer Stock" },
-  { to: "/stock-balancing", icon: GitCompareArrows, label: "Équilibrage Stock" }, // Nouveau lien
+  { to: "/stock-balancing", icon: GitCompareArrows, label: "Équilibrage Stock" },
 ];
 
-const SidebarContent: React.FC = () => (
-  <nav className="flex flex-col gap-2 p-4">
-    {navLinks.map((link) => (
-      <NavLink
-        key={link.to}
-        to={link.to}
-        className={({ isActive }) =>
-          cn(
-            "flex items-center gap-3 rounded-lg px-3 py-2 text-gray-700 transition-all hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-50",
-            isActive ? "bg-primary text-primary-foreground hover:text-primary-foreground dark:bg-primary dark:text-primary-foreground dark:hover:text-primary-foreground" : ""
-          )
-        }
-      >
-        <link.icon className="h-4 w-4" />
-        {link.label}
-      </NavLink>
-    ))}
-  </nav>
-);
+const SidebarContent: React.FC = () => {
+  const { session } = useSession();
+
+  const handleLogout = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      showError("Erreur lors de la déconnexion: " + error.message);
+    } else {
+      showSuccess("Vous avez été déconnecté.");
+    }
+  };
+
+  return (
+    <nav className="flex flex-col gap-2 p-4">
+      {navLinks.map((link) => (
+        <NavLink
+          key={link.to}
+          to={link.to}
+          className={({ isActive }) =>
+            cn(
+              "flex items-center gap-3 rounded-lg px-3 py-2 text-gray-700 transition-all hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-50",
+              isActive ? "bg-primary text-primary-foreground hover:text-primary-foreground dark:bg-primary dark:text-primary-foreground dark:hover:text-primary-foreground" : ""
+            )
+          }
+        >
+          <link.icon className="h-4 w-4" />
+          {link.label}
+        </NavLink>
+      ))}
+      {session && (
+        <Button
+          variant="ghost"
+          onClick={handleLogout}
+          className="flex items-center gap-3 rounded-lg px-3 py-2 text-red-600 transition-all hover:text-red-800 dark:text-red-400 dark:hover:text-red-200 justify-start"
+        >
+          <LogOut className="h-4 w-4" />
+          Déconnexion
+        </Button>
+      )}
+    </nav>
+  );
+};
 
 export const Sidebar: React.FC = () => {
   const isMobile = useIsMobile();
