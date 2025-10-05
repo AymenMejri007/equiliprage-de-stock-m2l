@@ -33,6 +33,8 @@ serve(async (req) => {
     const sheetName = workbook.SheetNames[0];
     const rows: any[] = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
 
+    console.log("Parsed Excel rows:", rows); // Log des données parsées
+
     const errors: any[] = [];
 
     // --- 1. Pré-chargement et mise en cache des données existantes ---
@@ -243,7 +245,7 @@ serve(async (req) => {
     });
 
   } catch (error: any) {
-    console.error('Erreur dans la fonction Edge import-stock-excel:', error.message);
+    console.error('Erreur dans la fonction Edge import-stock-excel:', error); // Log l'objet d'erreur complet
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 500,
