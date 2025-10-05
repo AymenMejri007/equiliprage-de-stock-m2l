@@ -157,11 +157,11 @@ serve(async (req) => {
         let articleId: string;
         let existingArticleData: { id: string } | null = null;
 
-        // 1. Try to find by code_barres_article (most reliable unique identifier)
+        // 1. Try to find by code_barres_article (most reliable unique identifier, case-insensitive)
         const { data: articleByBarcode, error: errBarcode } = await supabaseClient
           .from('articles')
           .select('id')
-          .eq('code_barres_article', codeBarresArticle)
+          .ilike('code_barres_article', codeBarresArticle) // Use ilike for case-insensitive comparison
           .single();
         
         if (errBarcode && errBarcode.code !== 'PGRST116') { // PGRST116 means no rows found
@@ -171,11 +171,11 @@ serve(async (req) => {
         if (articleByBarcode) {
             articleId = articleByBarcode.id;
             existingArticleData = articleByBarcode;
-        } else if (codeArticle) { // 2. If not found by barcode, try by code_article
+        } else if (codeArticle) { // 2. If not found by barcode, try by code_article (case-insensitive)
             const { data: articleByCode, error: errCode } = await supabaseClient
                 .from('articles')
                 .select('id')
-                .eq('code_article', codeArticle)
+                .ilike('code_article', codeArticle) // Use ilike for case-insensitive comparison
                 .single();
 
             if (errCode && errCode.code !== 'PGRST116') {
