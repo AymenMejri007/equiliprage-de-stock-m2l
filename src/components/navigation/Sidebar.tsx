@@ -1,18 +1,19 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { Home, LayoutDashboard, FileText, Store, List, Upload, Menu, GitCompareArrows, LogOut } from 'lucide-react'; // Ajout de l'icône LogOut
+import { Home, LayoutDashboard, FileText, Store, List, Upload, Menu, GitCompareArrows, LogOut } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { useSession } from '@/components/auth/SessionContextProvider'; // Import du hook useSession
-import { supabase } from '@/integrations/supabase/client'; // Import du client Supabase
+import { useSession } from '@/components/auth/SessionContextProvider';
+import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 
 interface NavLinkItem {
   to: string;
   icon: React.ElementType;
   label: string;
+  adminOnly?: boolean; // Ajout d'une propriété pour les liens admin
 }
 
 const navLinks: NavLinkItem[] = [
@@ -21,12 +22,13 @@ const navLinks: NavLinkItem[] = [
   { to: "/reports", icon: FileText, label: "Rapports" },
   { to: "/boutique-detail", icon: Store, label: "Détail Boutique" },
   { to: "/global-stock", icon: List, label: "Stock Global" },
-  { to: "/import-stock", icon: Upload, label: "Importer Stock" },
-  { to: "/stock-balancing", icon: GitCompareArrows, label: "Équilibrage Stock" },
+  { to: "/import-stock", icon: Upload, label: "Importer Stock", adminOnly: true }, // Admin seulement
+  { to: "/stock-balancing", icon: GitCompareArrows, label: "Équilibrage Stock", adminOnly: true }, // Admin seulement
 ];
 
 const SidebarContent: React.FC = () => {
-  const { session } = useSession();
+  const { session, userRole } = useSession();
+  const isAdmin = userRole === 'admin';
 
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
@@ -40,19 +42,21 @@ const SidebarContent: React.FC = () => {
   return (
     <nav className="flex flex-col gap-2 p-4">
       {navLinks.map((link) => (
-        <NavLink
-          key={link.to}
-          to={link.to}
-          className={({ isActive }) =>
-            cn(
-              "flex items-center gap-3 rounded-lg px-3 py-2 text-gray-700 transition-all hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-50",
-              isActive ? "bg-primary text-primary-foreground hover:text-primary-foreground dark:bg-primary dark:text-primary-foreground dark:hover:text-primary-foreground" : ""
-            )
-          }
-        >
-          <link.icon className="h-4 w-4" />
-          {link.label}
-        </NavLink>
+        (!link.adminOnly || isAdmin) && ( // Afficher le lien seulement si non adminOnly ou si l'utilisateur est admin
+          <NavLink
+            key={link.to}
+            to={link.to}
+            className={({ isActive }) =>
+              cn(
+                "flex items-center gap-3 rounded-lg px-3 py-2 text-gray-700 transition-all hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-50",
+                isActive ? "bg-primary text-primary-foreground hover:text-primary-foreground dark:bg-primary dark:text-primary-foreground dark:hover:text-primary-foreground" : ""
+              )
+            }
+          >
+            <link.icon className="h-4 w-4" />
+            {link.label}
+          </NavLink>
+        )
       ))}
       {session && (
         <Button

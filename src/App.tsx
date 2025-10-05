@@ -11,9 +11,10 @@ import BoutiqueDetail from "./pages/BoutiqueDetail";
 import GlobalStockList from "./pages/GlobalStockList";
 import ImportStock from "./pages/ImportStock";
 import StockBalancing from "./pages/StockBalancing";
-import Login from "./pages/Login"; // Importez la page de connexion
+import Login from "./pages/Login";
 import { AppLayout } from "./components/layout/AppLayout";
-import { SessionContextProvider } from "./components/auth/SessionContextProvider"; // Importez le contexte de session
+import { SessionContextProvider } from "./components/auth/SessionContextProvider";
+import AdminRouteWrapper from "./components/auth/AdminRouteWrapper"; // Importez le AdminRouteWrapper
 
 const queryClient = new QueryClient();
 
@@ -23,17 +24,20 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <SessionContextProvider> {/* Enveloppez l'application avec le contexte de session */}
+        <SessionContextProvider>
           <Routes>
-            <Route path="/login" element={<Login />} /> {/* Route pour la page de connexion */}
+            <Route path="/login" element={<Login />} />
             <Route path="/" element={<AppLayout />}>
               <Route index element={<Index />} />
               <Route path="dashboard" element={<Dashboard />} />
               <Route path="reports" element={<Reports />} />
               <Route path="boutique-detail" element={<BoutiqueDetail />} />
               <Route path="global-stock" element={<GlobalStockList />} />
-              <Route path="import-stock" element={<ImportStock />} />
-              <Route path="stock-balancing" element={<StockBalancing />} />
+              {/* Routes protégées par AdminRouteWrapper */}
+              <Route element={<AdminRouteWrapper />}>
+                <Route path="import-stock" element={<ImportStock />} />
+                <Route path="stock-balancing" element={<StockBalancing />} />
+              </Route>
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
