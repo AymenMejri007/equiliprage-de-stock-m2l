@@ -13,7 +13,7 @@ export type TransferProposal = {
   articles: {
     id: string;
     libelle: string;
-    code_article: string;
+    // code_article: string; // Removed
   } | null;
   source_boutique: {
     id: string;
@@ -30,7 +30,7 @@ export const getPendingTransferProposals = async (): Promise<TransferProposal[] 
     .from('transfer_proposals')
     .select(`
       *,
-      articles (id, libelle, code_article),
+      articles (id, libelle),
       source_boutique:boutiques!source_boutique_id (id, nom),
       destination_boutique:boutiques!destination_boutique_id (id, nom)
     `)
