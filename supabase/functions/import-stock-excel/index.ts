@@ -240,7 +240,7 @@ serve(async (req) => {
     if (articlesToUpsert.length > 0) {
       const { error: upsertError } = await supabaseClient
         .from('articles')
-        .upsert(articlesToUpsert, { onConflict: 'articles_lower_code_barres_article_idx' }); // CHANGED: Use the index name for conflict resolution
+        .upsert(articlesToUpsert, { onConflict: 'code_barres_article' }); // CHANGED: Revert to column name
       if (upsertError) throw upsertError;
     }
 
