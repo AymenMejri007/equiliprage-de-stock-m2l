@@ -51,16 +51,18 @@ serve(async (req) => {
     // Clé composite pour sous-familles: nom + famille_id
     const sousFamilleMap = new Map(existingSousFamilles.map(sf => [`${sf.nom}-${sf.famille_id}`, sf.id]));
 
-    // Charger les articles existants par code_barres_article, en nettoyant et normalisant les valeurs
-    const { data: existingArticles, error: errArticles } = await supabaseClient.from('articles').select('id, code_barres_article');
+    // Charger les articles existants par code_article et code_barres_article, en nettoyant et normalisant les valeurs
+    const { data: existingArticles, error: errArticles } = await supabaseClient.from('articles').select('id, code_article, code_barres_article');
     if (errArticles) throw errArticles;
-    const articleMap = new Map(existingArticles.map(a => [String(a.code_barres_article).trim().toLowerCase(), a.id]));
+    const articleByCodeArticleMap = new Map(existingArticles.map(a => [String(a.code_article || '').trim().toLowerCase(), a.id]));
+    const articleByCodeBarresArticleMap = new Map(existingArticles.map(a => [String(a.code_barres_article || '').trim().toLowerCase(), a.id]));
+
 
     // --- Collecteurs pour les opérations groupées (utilisent des Maps pour la déduplication) ---
     const boutiquesToInsert: { id: string, nom: string }[] = [];
     const famillesToInsert: { id: string, nom: string }[] = [];
     const sousFamillesToInsert: { id: string, nom: string, famille_id: string }[] = [];
-    const articlesToUpsertMap = new Map<string, any>(); // Clé: code_barres_article
+    const articlesToUpsertMap = new Map<string, any>(); // Clé: code_article (pour l'upsert)
     const stockToUpsertMap = new Map<string, any>();    // Clé: `${id_boutique}-${id_article}`
     const ventesToUpsertMap = new Map<string, any>();    // Clé: `${id_boutique}-${id_article}-${date_mois}`
 
@@ -70,7 +72,7 @@ serve(async (req) => {
         const marqueArticle = row['MARQUE'];
         const categoriePrincipaleNom = row['CATEGORIE PRINCIPALE'];
         const sousCategorieNom = row['SOUS-CATEGORIE'];
-        const codeArticle = row['Code article']; // Peut être null/undefined
+        const codeArticleRaw = row['Code article']; // Valeur brute
         const libelleArticle = row['Libellé article'];
         const colorisArticle = row['Coloris'];
         const codeBarresArticleRaw = row['Code-barres article']; // Valeur brute
@@ -85,6 +87,9 @@ serve(async (req) => {
           continue;
         }
         const codeBarresArticle = String(codeBarresArticleRaw).trim().toLowerCase(); // Normaliser en minuscules
+
+        // Normalisation de codeArticle
+        const codeArticle = codeArticleRaw ? String(codeArticleRaw).trim().toLowerCase() : null;
 
         // Validation plus spécifique
         if (!depotNom) {
@@ -146,31 +151,38 @@ serve(async (req) => {
         }
 
         let articleId: string;
-        const existingArticleId = articleMap.get(codeBarresArticle); // Utilise la valeur nettoyée et normalisée
+        // Prioriser la recherche par code_article si présent, sinon par code_barres_article
+        let existingArticleId: string | undefined;
+        if (codeArticle && articleByCodeArticleMap.has(codeArticle)) {
+          existingArticleId = articleByCodeArticleMap.get(codeArticle);
+        } else if (codeBarresArticle && articleByCodeBarresArticleMap.has(codeBarresArticle)) {
+          existingArticleId = articleByCodeBarresArticleMap.get(codeBarresArticle);
+        }
 
         const articlePayload: any = {
-          code_article: codeArticle || null, // Rendre nullable
+          code_article: codeArticle,
           libelle: libelleArticle,
           famille_id: familleId,
           sous_famille_id: sousFamilleId,
           marque: marqueArticle,
           coloris: colorisArticle,
-          code_barres_article: codeBarresArticle, // Utilise la valeur nettoyée et normalisée
+          code_barres_article: codeBarresArticle,
         };
 
         if (existingArticleId) {
           articleId = existingArticleId;
-          articlesToUpsertMap.set(codeBarresArticle, {
+          articlesToUpsertMap.set(codeArticle || codeBarresArticle, { // Utiliser codeArticle comme clé si présent, sinon codeBarresArticle
             id: articleId, // Inclure l'ID existant pour la mise à jour
             ...articlePayload,
           });
         } else {
           articleId = crypto.randomUUID();
-          articlesToUpsertMap.set(codeBarresArticle, {
+          articlesToUpsertMap.set(codeArticle || codeBarresArticle, { // Utiliser codeArticle comme clé si présent, sinon codeBarresArticle
             id: articleId,
             ...articlePayload,
           });
-          articleMap.set(codeBarresArticle, articleId); // Mettre à jour la map pour les lignes suivantes dans le même lot
+          if (codeArticle) articleByCodeArticleMap.set(codeArticle, articleId);
+          articleByCodeBarresArticleMap.set(codeBarresArticle, articleId);
         }
 
         stockToUpsertMap.set(`${boutiqueId}-${articleId}`, {
@@ -225,7 +237,7 @@ serve(async (req) => {
     if (articlesToUpsert.length > 0) {
       const { error: upsertError } = await supabaseClient
         .from('articles')
-        .upsert(articlesToUpsert, { onConflict: 'code_barres_article' });
+        .upsert(articlesToUpsert, { onConflict: 'code_article' }); // Changement ici: onConflict sur code_article
       if (upsertError) throw upsertError;
     }
 
