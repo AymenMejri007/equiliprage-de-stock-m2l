@@ -62,7 +62,7 @@ serve(async (req) => {
     const boutiquesToInsert: { id: string, nom: string }[] = [];
     const famillesToInsert: { id: string, nom: string }[] = [];
     const sousFamillesToInsert: { id: string, nom: string, famille_id: string }[] = [];
-    const articlesToUpsertMap = new Map<string, any>(); // Clé: code_article (pour l'upsert)
+    const articlesToUpsertMap = new Map<string, any>(); // Clé: code_barres_article
     const stockToUpsertMap = new Map<string, any>();    // Clé: `${id_boutique}-${id_article}`
     const ventesToUpsertMap = new Map<string, any>();    // Clé: `${id_boutique}-${id_article}-${date_mois}`
 
@@ -151,13 +151,8 @@ serve(async (req) => {
         }
 
         let articleId: string;
-        // Prioriser la recherche par code_article si présent, sinon par code_barres_article
-        let existingArticleId: string | undefined;
-        if (codeArticle && articleByCodeArticleMap.has(codeArticle)) {
-          existingArticleId = articleByCodeArticleMap.get(codeArticle);
-        } else if (codeBarresArticle && articleByCodeBarresArticleMap.has(codeBarresArticle)) {
-          existingArticleId = articleByCodeBarresArticleMap.get(codeBarresArticle);
-        }
+        // Utiliser codeBarresArticle pour l'identification car il est NOT NULL
+        const existingArticleId = articleByCodeBarresArticleMap.get(codeBarresArticle);
 
         const articlePayload: any = {
           code_article: codeArticle,
@@ -171,18 +166,19 @@ serve(async (req) => {
 
         if (existingArticleId) {
           articleId = existingArticleId;
-          articlesToUpsertMap.set(codeArticle || codeBarresArticle, { // Utiliser codeArticle comme clé si présent, sinon codeBarresArticle
+          articlesToUpsertMap.set(codeBarresArticle, { // Clé de la map par codeBarresArticle
             id: articleId, // Inclure l'ID existant pour la mise à jour
             ...articlePayload,
           });
         } else {
           articleId = crypto.randomUUID();
-          articlesToUpsertMap.set(codeArticle || codeBarresArticle, { // Utiliser codeArticle comme clé si présent, sinon codeBarresArticle
+          articlesToUpsertMap.set(codeBarresArticle, { // Clé de la map par codeBarresArticle
             id: articleId,
             ...articlePayload,
           });
-          if (codeArticle) articleByCodeArticleMap.set(codeArticle, articleId);
+          // Mettre à jour les maps pour les lignes suivantes dans le même lot
           articleByCodeBarresArticleMap.set(codeBarresArticle, articleId);
+          if (codeArticle) articleByCodeArticleMap.set(codeArticle, articleId); // Garder pour une utilisation future potentielle
         }
 
         stockToUpsertMap.set(`${boutiqueId}-${articleId}`, {
@@ -237,7 +233,7 @@ serve(async (req) => {
     if (articlesToUpsert.length > 0) {
       const { error: upsertError } = await supabaseClient
         .from('articles')
-        .upsert(articlesToUpsert, { onConflict: 'code_article' }); // Changement ici: onConflict sur code_article
+        .upsert(articlesToUpsert, { onConflict: 'code_barres_article' }); // Changement ici: onConflict sur code_barres_article
       if (upsertError) throw upsertError;
     }
 
