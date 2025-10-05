@@ -36,6 +36,32 @@ serve(async (req) => {
     const processedRows: any[] = [];
     const errors: any[] = [];
 
+    // --- 1. Pré-chargement et mise en cache des données existantes ---
+    const { data: existingBoutiques, error: errBoutiques } = await supabaseClient.from('boutiques').select('id, nom');
+    if (errBoutiques) throw errBoutiques;
+    const boutiqueMap = new Map(existingBoutiques.map(b => [b.nom, b.id]));
+
+    const { data: existingFamilles, error: errFamilles } = await supabaseClient.from('familles').select('id, nom');
+    if (errFamilles) throw errFamilles;
+    const familleMap = new Map(existingFamilles.map(f => [f.nom, f.id]));
+
+    const { data: existingSousFamilles, error: errSousFamilles } = await supabaseClient.from('sous_familles').select('id, nom, famille_id');
+    if (errSousFamilles) throw errSousFamilles;
+    // Clé composite pour sous-familles: nom + famille_id
+    const sousFamilleMap = new Map(existingSousFamilles.map(sf => [`${sf.nom}-${sf.famille_id}`, sf.id]));
+
+    const { data: existingArticles, error: errArticles } = await supabaseClient.from('articles').select('id, code_article');
+    if (errArticles) throw errArticles;
+    const articleMap = new Map(existingArticles.map(a => [a.code_article, a.id]));
+
+    // --- Collecteurs pour les opérations groupées ---
+    const boutiquesToInsert: { nom: string }[] = [];
+    const famillesToInsert: { nom: string }[] = [];
+    const sousFamillesToInsert: { nom: string, famille_id: string }[] = [];
+    const articlesToUpsert: any[] = []; // Peut être upsert car code_article est unique
+    const stockToUpsert: any[] = [];
+    const ventesToUpsert: any[] = [];
+
     for (const row of rows) {
       try {
         const depotNom = row['Dépôt'];
@@ -47,7 +73,7 @@ serve(async (req) => {
         const colorisArticle = row['Coloris'];
         const codeBarresArticle = row['Code-barres article'];
         const stockActuel = parseInt(row['Physique']);
-        const ventesFO = parseInt(row['Ventes FO']); // Nouvelle colonne
+        const ventesFO = parseInt(row['Ventes FO']);
         const stockMax = parseInt(row['Stock maximum']);
         const stockMin = parseInt(row['Stock minimum']);
 
@@ -56,143 +82,89 @@ serve(async (req) => {
           continue;
         }
 
-        // 1. Upsert Boutique (Dépôt)
-        let { data: boutiqueData, error: boutiqueError } = await supabaseClient
-          .from('boutiques')
-          .select('id')
-          .eq('nom', depotNom)
-          .single();
-
-        if (boutiqueError && boutiqueError.code === 'PGRST116') { // No rows found
-          const { data: newBoutique, error: insertBoutiqueError } = await supabaseClient
-            .from('boutiques')
-            .insert({ nom: depotNom })
-            .select('id')
-            .single();
-          if (insertBoutiqueError) throw insertBoutiqueError;
-          boutiqueData = newBoutique;
-        } else if (boutiqueError) {
-          throw boutiqueError;
+        let boutiqueId: string;
+        if (boutiqueMap.has(depotNom)) {
+          boutiqueId = boutiqueMap.get(depotNom)!;
+        } else {
+          // Ajouter à la liste d'insertion et au cache pour les lignes suivantes
+          const newBoutiqueId = crypto.randomUUID(); // Générer un UUID côté fonction
+          boutiquesToInsert.push({ id: newBoutiqueId, nom: depotNom });
+          boutiqueMap.set(depotNom, newBoutiqueId);
+          boutiqueId = newBoutiqueId;
         }
-        const boutiqueId = boutiqueData!.id;
 
-        // 2. Upsert Famille (CATEGORIE PRINCIPALE)
-        let { data: familleData, error: familleError } = await supabaseClient
-          .from('familles')
-          .select('id')
-          .eq('nom', categoriePrincipaleNom)
-          .single();
-
-        if (familleError && familleError.code === 'PGRST116') {
-          const { data: newFamille, error: insertFamilleError } = await supabaseClient
-            .from('familles')
-            .insert({ nom: categoriePrincipaleNom })
-            .select('id')
-            .single();
-          if (insertFamilleError) throw insertFamilleError;
-          familleData = newFamille;
-        } else if (familleError) {
-          throw familleError;
+        let familleId: string;
+        if (familleMap.has(categoriePrincipaleNom)) {
+          familleId = familleMap.get(categoriePrincipaleNom)!;
+        } else {
+          const newFamilleId = crypto.randomUUID();
+          famillesToInsert.push({ id: newFamilleId, nom: categoriePrincipaleNom });
+          familleMap.set(categoriePrincipaleNom, newFamilleId);
+          familleId = newFamilleId;
         }
-        const familleId = familleData!.id;
 
-        // 3. Upsert Sous-Famille (SOUS-CATEGORIE, if provided)
-        let sousFamilleId = null;
+        let sousFamilleId: string | null = null;
         if (sousCategorieNom) {
-          let { data: sousFamilleData, error: sfError } = await supabaseClient
-            .from('sous_familles')
-            .select('id')
-            .eq('nom', sousCategorieNom)
-            .eq('famille_id', familleId)
-            .single();
-
-          if (sfError && sfError.code === 'PGRST116') {
-            const { data: newSousFamille, error: insertSfError } = await supabaseClient
-              .from('sous_familles')
-              .insert({ nom: sousCategorieNom, famille_id: familleId })
-              .select('id')
-              .single();
-            if (insertSfError) throw insertSfError;
-            sousFamilleData = newSousFamille;
-          } else if (sfError) {
-            throw sfError;
+          const sousFamilleKey = `${sousCategorieNom}-${familleId}`;
+          if (sousFamilleMap.has(sousFamilleKey)) {
+            sousFamilleId = sousFamilleMap.get(sousFamilleKey)!;
+          } else {
+            const newSousFamilleId = crypto.randomUUID();
+            sousFamillesToInsert.push({ id: newSousFamilleId, nom: sousCategorieNom, famille_id: familleId });
+            sousFamilleMap.set(sousFamilleKey, newSousFamilleId);
+            sousFamilleId = newSousFamilleId;
           }
-          sousFamilleId = sousFamilleData!.id;
         }
 
-        // 4. Upsert Article
-        let { data: articleData, error: articleError } = await supabaseClient
-          .from('articles')
-          .select('id')
-          .eq('code_article', codeArticle)
-          .single();
-
-        if (articleError && articleError.code === 'PGRST116') {
-          const { data: newArticle, error: insertArticleError } = await supabaseClient
-            .from('articles')
-            .insert({
-              code_article: codeArticle,
-              libelle: libelleArticle,
-              famille_id: familleId,
-              sous_famille_id: sousFamilleId,
-              marque: marqueArticle,
-              coloris: colorisArticle,
-              code_barres_article: codeBarresArticle,
-            })
-            .select('id')
-            .single();
-          if (insertArticleError) throw insertArticleError;
-          articleData = newArticle;
-        } else if (articleError) {
-          throw articleError;
+        let articleId: string;
+        if (articleMap.has(codeArticle)) {
+          articleId = articleMap.get(codeArticle)!;
+          // Si l'article existe, nous voulons le mettre à jour avec les dernières infos
+          articlesToUpsert.push({
+            id: articleId,
+            code_article: codeArticle,
+            libelle: libelleArticle,
+            famille_id: familleId,
+            sous_famille_id: sousFamilleId,
+            marque: marqueArticle,
+            coloris: colorisArticle,
+            code_barres_article: codeBarresArticle,
+          });
+        } else {
+          const newArticleId = crypto.randomUUID();
+          articlesToUpsert.push({
+            id: newArticleId,
+            code_article: codeArticle,
+            libelle: libelleArticle,
+            famille_id: familleId,
+            sous_famille_id: sousFamilleId,
+            marque: marqueArticle,
+            coloris: colorisArticle,
+            code_barres_article: codeBarresArticle,
+          });
+          articleMap.set(codeArticle, newArticleId);
+          articleId = newArticleId;
         }
-        const articleId = articleData!.id;
 
-        // 5. Upsert Stock
-        const { data: stockUpsertData, error: stockUpsertError } = await supabaseClient
-          .from('stock')
-          .upsert(
-            {
-              id_boutique: boutiqueId,
-              id_article: articleId,
-              stock_actuel: stockActuel,
-              stock_min: stockMin,
-              stock_max: stockMax,
-            },
-            { onConflict: 'id_boutique,id_article' }
-          )
-          .select();
+        stockToUpsert.push({
+          id_boutique: boutiqueId,
+          id_article: articleId,
+          stock_actuel: stockActuel,
+          stock_min: stockMin,
+          stock_max: stockMax,
+        });
 
-        if (stockUpsertError) {
-          console.error("Stock upsert error:", stockUpsertError);
-          throw stockUpsertError;
-        }
-        processedRows.push(stockUpsertData);
-
-        // 6. Process Ventes FO (if valid)
         if (!isNaN(ventesFO) && ventesFO >= 0) {
-          const monthlySalesQuantity = Math.round(ventesFO / 6); // Arrondir à l'entier le plus proche
-          const salesToInsert = [];
+          const monthlySalesQuantity = Math.round(ventesFO / 6);
           const today = new Date();
-
           for (let i = 0; i < 6; i++) {
             const date = new Date(today.getFullYear(), today.getMonth() - i, 1);
-            salesToInsert.push({
+            ventesToUpsert.push({
               id_boutique: boutiqueId,
               id_article: articleId,
-              date_mois: date.toISOString().split('T')[0], // Format YYYY-MM-DD
+              date_mois: date.toISOString().split('T')[0],
               quantite_vendue: monthlySalesQuantity,
             });
-          }
-
-          const { error: salesUpsertError } = await supabaseClient
-            .from('ventes')
-            .upsert(salesToInsert, { onConflict: 'id_boutique,id_article,date_mois' });
-
-          if (salesUpsertError) {
-            console.error("Sales upsert error:", salesUpsertError);
-            // Ne pas bloquer l'importation entière pour une erreur de vente
-            errors.push({ row, message: `Error upserting sales data: ${salesUpsertError.message}` });
           }
         }
 
@@ -202,9 +174,49 @@ serve(async (req) => {
       }
     }
 
+    // --- 2. Exécution des opérations groupées ---
+
+    // Insérer les nouvelles boutiques, familles, sous-familles
+    if (boutiquesToInsert.length > 0) {
+      const { error: insertError } = await supabaseClient.from('boutiques').insert(boutiquesToInsert);
+      if (insertError) throw insertError;
+    }
+    if (famillesToInsert.length > 0) {
+      const { error: insertError } = await supabaseClient.from('familles').insert(famillesToInsert);
+      if (insertError) throw insertError;
+    }
+    if (sousFamillesToInsert.length > 0) {
+      const { error: insertError } = await supabaseClient.from('sous_familles').insert(sousFamillesToInsert);
+      if (insertError) throw insertError;
+    }
+
+    // Upsert articles (insert ou update si code_article existe)
+    if (articlesToUpsert.length > 0) {
+      const { error: upsertError } = await supabaseClient
+        .from('articles')
+        .upsert(articlesToUpsert, { onConflict: 'code_article' });
+      if (upsertError) throw upsertError;
+    }
+
+    // Upsert stock
+    if (stockToUpsert.length > 0) {
+      const { error: upsertError } = await supabaseClient
+        .from('stock')
+        .upsert(stockToUpsert, { onConflict: 'id_boutique,id_article' });
+      if (upsertError) throw upsertError;
+    }
+
+    // Upsert ventes
+    if (ventesToUpsert.length > 0) {
+      const { error: upsertError } = await supabaseClient
+        .from('ventes')
+        .upsert(ventesToUpsert, { onConflict: 'id_boutique,id_article,date_mois' });
+      if (upsertError) throw upsertError;
+    }
+
     return new Response(JSON.stringify({
-      message: `Importation terminée. ${processedRows.length} lignes de stock traitées. ${errors.length} erreurs.`,
-      processedRows: processedRows.length,
+      message: `Importation terminée. ${rows.length - errors.length} lignes traitées avec succès. ${errors.length} erreurs.`,
+      processedRows: rows.length - errors.length,
       errors: errors,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
