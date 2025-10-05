@@ -51,10 +51,10 @@ serve(async (req) => {
     // Clé composite pour sous-familles: nom + famille_id
     const sousFamilleMap = new Map(existingSousFamilles.map(sf => [`${sf.nom}-${sf.famille_id}`, sf.id]));
 
-    // Charger les articles existants par code_barres_article, en nettoyant les valeurs
+    // Charger les articles existants par code_barres_article, en nettoyant et normalisant les valeurs
     const { data: existingArticles, error: errArticles } = await supabaseClient.from('articles').select('id, code_barres_article');
     if (errArticles) throw errArticles;
-    const articleMap = new Map(existingArticles.map(a => [String(a.code_barres_article).trim(), a.id]));
+    const articleMap = new Map(existingArticles.map(a => [String(a.code_barres_article).trim().toLowerCase(), a.id]));
 
     // --- Collecteurs pour les opérations groupées (utilisent des Maps pour la déduplication) ---
     const boutiquesToInsert: { id: string, nom: string }[] = [];
@@ -84,7 +84,7 @@ serve(async (req) => {
           errors.push({ row, message: 'Missing Code-barres article (mandatory)' });
           continue;
         }
-        const codeBarresArticle = String(codeBarresArticleRaw).trim(); // Nettoyage ici
+        const codeBarresArticle = String(codeBarresArticleRaw).trim().toLowerCase(); // Normaliser en minuscules
 
         // Validation plus spécifique
         if (!depotNom) {
@@ -146,7 +146,7 @@ serve(async (req) => {
         }
 
         let articleId: string;
-        const existingArticleId = articleMap.get(codeBarresArticle); // Utilise la valeur nettoyée
+        const existingArticleId = articleMap.get(codeBarresArticle); // Utilise la valeur nettoyée et normalisée
 
         const articlePayload: any = {
           code_article: codeArticle || null, // Rendre nullable
@@ -155,7 +155,7 @@ serve(async (req) => {
           sous_famille_id: sousFamilleId,
           marque: marqueArticle,
           coloris: colorisArticle,
-          code_barres_article: codeBarresArticle, // Utilise la valeur nettoyée
+          code_barres_article: codeBarresArticle, // Utilise la valeur nettoyée et normalisée
         };
 
         if (existingArticleId) {
