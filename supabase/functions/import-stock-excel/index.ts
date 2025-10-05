@@ -56,13 +56,13 @@ serve(async (req) => {
     if (errArticles) throw errArticles;
     const articleMap = new Map(existingArticles.map(a => [String(a.code_barres_article).trim(), a.id]));
 
-    // --- Collecteurs pour les opérations groupées ---
+    // --- Collecteurs pour les opérations groupées (utilisent des Maps pour la déduplication) ---
     const boutiquesToInsert: { id: string, nom: string }[] = [];
     const famillesToInsert: { id: string, nom: string }[] = [];
     const sousFamillesToInsert: { id: string, nom: string, famille_id: string }[] = [];
-    const articlesToUpsert: any[] = []; // Cet array contiendra les payloads pour l'upsert des articles
-    const stockToUpsert: any[] = [];
-    const ventesToUpsert: any[] = [];
+    const articlesToUpsertMap = new Map<string, any>(); // Clé: code_barres_article
+    const stockToUpsertMap = new Map<string, any>();    // Clé: `${id_boutique}-${id_article}`
+    const ventesToUpsertMap = new Map<string, any>();    // Clé: `${id_boutique}-${id_article}-${date_mois}`
 
     for (const row of rows) {
       try {
@@ -160,20 +160,20 @@ serve(async (req) => {
 
         if (existingArticleId) {
           articleId = existingArticleId;
-          articlesToUpsert.push({
+          articlesToUpsertMap.set(codeBarresArticle, {
             id: articleId, // Inclure l'ID existant pour la mise à jour
             ...articlePayload,
           });
         } else {
           articleId = crypto.randomUUID();
-          articlesToUpsert.push({
+          articlesToUpsertMap.set(codeBarresArticle, {
             id: articleId,
             ...articlePayload,
           });
           articleMap.set(codeBarresArticle, articleId); // Mettre à jour la map pour les lignes suivantes dans le même lot
         }
 
-        stockToUpsert.push({
+        stockToUpsertMap.set(`${boutiqueId}-${articleId}`, {
           id_boutique: boutiqueId,
           id_article: articleId,
           stock_actuel: stockActuel,
@@ -186,10 +186,11 @@ serve(async (req) => {
           const today = new Date();
           for (let i = 0; i < 6; i++) {
             const date = new Date(today.getFullYear(), today.getMonth() - i, 1);
-            ventesToUpsert.push({
+            const dateMois = date.toISOString().split('T')[0];
+            ventesToUpsertMap.set(`${boutiqueId}-${articleId}-${dateMois}`, {
               id_boutique: boutiqueId,
               id_article: articleId,
-              date_mois: date.toISOString().split('T')[0],
+              date_mois: dateMois,
               quantite_vendue: monthlySalesQuantity,
             });
           }
@@ -215,6 +216,11 @@ serve(async (req) => {
       const { error: insertError } = await supabaseClient.from('sous_familles').insert(sousFamillesToInsert);
       if (insertError) throw insertError;
     }
+
+    // Convertir les Maps en tableaux pour l'upsert
+    const articlesToUpsert = Array.from(articlesToUpsertMap.values());
+    const stockToUpsert = Array.from(stockToUpsertMap.values());
+    const ventesToUpsert = Array.from(ventesToUpsertMap.values());
 
     if (articlesToUpsert.length > 0) {
       const { error: upsertError } = await supabaseClient
