@@ -73,7 +73,7 @@ serve(async (req) => {
         const marqueArticle = row['MARQUE'];
         const categoriePrincipaleNom = row['CATEGORIE PRINCIPALE'];
         const sousCategorieNom = row['SOUS-CATEGORIE'];
-        const codeArticleRaw = row['Code article'];
+        // const codeArticleRaw = row['Code article']; // Removed
         const libelleArticle = row['Libellé article'];
         const colorisArticle = row['Coloris'];
         const codeBarresArticleRaw = row['Code-barres article'];
@@ -88,12 +88,11 @@ serve(async (req) => {
         }
         const codeBarresArticle = String(codeBarresArticleRaw).trim().toLowerCase();
 
-        const codeArticle = codeArticleRaw ? String(codeArticleRaw).trim().toLowerCase() : null;
-
-        if (!codeArticle) {
-          errors.push({ row, message: 'Missing Code article (mandatory for unique identification)' });
-          continue;
-        }
+        // Removed codeArticle validation as it's no longer used as a primary identifier
+        // if (!codeArticle) {
+        //   errors.push({ row, message: 'Missing Code article (mandatory for unique identification)' });
+        //   continue;
+        // }
 
         if (!depotNom) {
           errors.push({ row, message: 'Missing Dépôt name' });
@@ -157,7 +156,7 @@ serve(async (req) => {
         let articleId: string;
         let existingArticleData: { id: string } | null = null;
 
-        // 1. Try to find by code_barres_article (most reliable unique identifier, case-insensitive)
+        // Only try to find by code_barres_article (most reliable unique identifier, case-insensitive)
         const { data: articleByBarcode, error: errBarcode } = await supabaseClient
           .from('articles')
           .select('id')
@@ -171,25 +170,11 @@ serve(async (req) => {
         if (articleByBarcode) {
             articleId = articleByBarcode.id;
             existingArticleData = articleByBarcode;
-        } else if (codeArticle) { // 2. If not found by barcode, try by code_article (case-insensitive)
-            const { data: articleByCode, error: errCode } = await supabaseClient
-                .from('articles')
-                .select('id')
-                .ilike('code_article', codeArticle) // Use ilike for case-insensitive comparison
-                .single();
-
-            if (errCode && errCode.code !== 'PGRST116') {
-                throw errCode;
-            }
-
-            if (articleByCode) {
-                articleId = articleByCode.id;
-                existingArticleData = articleByCode;
-            }
-        }
+        } 
+        // Removed lookup by code_article
 
         const articlePayload: any = {
-          code_article: codeArticle,
+          // code_article: codeArticle, // Removed
           libelle: libelleArticle,
           famille_id: familleId,
           sous_famille_id: sousFamilleId,

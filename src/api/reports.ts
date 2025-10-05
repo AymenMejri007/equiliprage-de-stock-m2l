@@ -12,7 +12,7 @@ export type TransfertItem = {
   articles: {
     id: string;
     libelle: string;
-    code_article: string;
+    // code_article: string; // Removed
   } | null;
   source_boutique: {
     id: string;
@@ -34,7 +34,7 @@ export const getTransferHistory = async (): Promise<TransfertItem[] | null> => {
     .from('transferts')
     .select(`
       *,
-      articles (id, libelle, code_article),
+      articles (id, libelle),
       source_boutique:boutiques!id_source (id, nom),
       destination_boutique:boutiques!id_destination (id, nom)
     `)

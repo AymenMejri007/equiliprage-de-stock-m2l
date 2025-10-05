@@ -6,7 +6,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Helper to determine stock status
+// Helper function to determine stock status
 const getStockStatus = (stock_actuel: number, stock_min: number, stock_max: number): 'surstock' | 'rupture' | 'normal' => {
   if (stock_actuel > stock_max) {
     return 'surstock';
@@ -28,124 +28,154 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // 1. Fetch all necessary data
-    const { data: stockItems, error: stockError } = await supabaseClient
+    const today = new Date();
+    const sixMonthsAgo = new Date(today.setMonth(today.getMonth() - 6));
+
+    // 1. Récupérer toutes les données nécessaires (stock, articles, familles, sous-familles, boutiques)
+    const { data: stockData, error: stockError } = await supabaseClient
       .from('stock')
       .select(`
         id, id_boutique, id_article, stock_actuel, stock_min, stock_max,
-        articles (id, libelle, code_article, famille_id, sous_famille_id, familles (id, nom), sous_familles (id, nom, famille_id)),
+        articles (id, libelle, famille_id, sous_famille_id, familles (id, nom), sous_familles (id, nom, famille_id)),
         boutiques (id, nom)
       `);
+
     if (stockError) throw stockError;
 
+    // 2. Calculer la rotation moyenne par article (consommation moyenne mensuelle)
     const { data: salesData, error: salesError } = await supabaseClient
       .from('ventes')
-      .select('id_article, id_boutique, quantite_vendue, date_mois');
+      .select('id_article, id_boutique, quantite_vendue, date_mois')
+      .gte('date_mois', sixMonthsAgo.toISOString().split('T')[0]);
+
     if (salesError) throw salesError;
 
-    const { data: boutiquesData, error: boutiquesError } = await supabaseClient
-      .from('boutiques')
-      .select('id, nom');
-    if (boutiquesError) throw boutiquesError;
-    const boutiquesMap = new Map(boutiquesData.map(b => [b.id, b.nom]));
-
-    // 2. Calculate average monthly sales per article per boutique
-    const articleBoutiqueSales: { [articleId: string]: { [boutiqueId: string]: number[] } } = {};
+    const articleMonthlyConsumption: { [articleId: string]: { [boutiqueId: string]: number[] } } = {};
     salesData.forEach(sale => {
-      if (!articleBoutiqueSales[sale.id_article]) articleBoutiqueSales[sale.id_article] = {};
-      if (!articleBoutiqueSales[sale.id_article][sale.id_boutique]) articleBoutiqueSales[sale.id_article][sale.id_boutique] = [];
-      articleBoutiqueSales[sale.id_article][sale.id_boutique].push(sale.quantite_vendue);
+      if (!articleMonthlyConsumption[sale.id_article]) {
+        articleMonthlyConsumption[sale.id_article] = {};
+      }
+      if (!articleMonthlyConsumption[sale.id_article][sale.id_boutique]) {
+        articleMonthlyConsumption[sale.id_article][sale.id_boutique] = [];
+      }
+      articleMonthlyConsumption[sale.id_article][sale.id_boutique].push(sale.quantite_vendue);
     });
 
-    const averageMonthlySales: { [articleId: string]: { [boutiqueId: string]: number } } = {};
-    for (const articleId in articleBoutiqueSales) {
-      averageMonthlySales[articleId] = {};
-      for (const boutiqueId in articleBoutiqueSales[articleId]) {
-        const totalSales = articleBoutiqueSales[articleId][boutiqueId].reduce((sum, qty) => sum + qty, 0);
-        // Assuming sales data is for 6 months, adjust if your sales data period varies
-        averageMonthlySales[articleId][boutiqueId] = totalSales / 6;
+    const averageMonthlyConsumption: { [articleId: string]: { [boutiqueId: string]: number } } = {};
+    for (const articleId in articleMonthlyConsumption) {
+      averageMonthlyConsumption[articleId] = {};
+      for (const boutiqueId in articleMonthlyConsumption[articleId]) {
+        const totalSales = articleMonthlyConsumption[articleId][boutiqueId].reduce((sum, qty) => sum + qty, 0);
+        averageMonthlyConsumption[articleId][boutiqueId] = totalSales / 6; // Assuming 6 months of data
       }
     }
 
-    // 3. Identify overstocked and understocked items
+    // Structures pour l'analyse hiérarchique
+    const familyAnalysis: { [familleId: string]: { nom: string, totalItems: number, overstock: number, rupture: number, normal: number, boutiques: { [boutiqueId: string]: { nom: string, totalItems: number, overstock: number, rupture: number, normal: number } } } } = {};
+    const subFamilyAnalysis: { [sousFamilleId: string]: { nom: string, familleNom: string, totalItems: number, overstock: number, rupture: number, normal: number, boutiques: { [boutiqueId: string]: { nom: string, totalItems: number, overstock: number, rupture: number, normal: number } } } } = {};
+    const articleAnalysis: { [articleId: string]: { libelle: string, familleNom: string, sousFamilleNom: string, totalItems: number, overstock: number, rupture: number, normal: number, boutiques: { [boutiqueId: string]: { nom: string, stock_actuel: number, stock_min: number, stock_max: number, status: string } } } } = {};
+
     const overstockedItems: any[] = [];
     const understockedItems: any[] = [];
-    const articlesToRebalance: { [articleId: string]: { libelle: string, code_article: string, familleNom: string, sousFamilleNom: string, overstockedBoutiques: any[], understockedBoutiques: any[], totalOverstock: number, totalUnderstock: number } } = {};
-    const boutiqueSummary: { [boutiqueId: string]: { nom: string, totalTransferOut: number, totalTransferIn: number, overstockedArticles: number, understockedArticles: number } } = {};
 
-    stockItems.forEach(item => {
-      const status = getStockStatus(item.stock_actuel, item.stock_min, item.stock_max);
+    stockData.forEach(item => {
+      const currentStock = item.stock_actuel;
+      const minStock = item.stock_min;
+      const maxStock = item.stock_max;
+      const status = getStockStatus(currentStock, minStock, maxStock);
+
       const boutiqueId = item.id_boutique;
+      const boutiqueNom = item.boutiques?.nom || 'Inconnue';
       const articleId = item.id_article;
-      const articleLibelle = item.articles?.libelle || 'N/A';
-      const articleCode = item.articles?.code_article || 'N/A';
-      const familleNom = item.articles?.familles?.nom || 'N/A';
-      const sousFamilleNom = item.articles?.sous_familles?.nom || 'N/A';
+      const articleLibelle = item.articles?.libelle || 'Inconnu';
+      // const articleCode = item.articles?.code_article || 'N/A'; // Removed
+      const familleId = item.articles?.famille_id;
+      const familleNom = item.articles?.familles?.nom || 'Non classé';
+      const sousFamilleId = item.articles?.sous_famille_id;
+      const sousFamilleNom = item.articles?.sous_familles?.nom || 'Non classée';
 
-      if (!boutiqueSummary[boutiqueId]) {
-        boutiqueSummary[boutiqueId] = { nom: boutiquesMap.get(boutiqueId) || 'Inconnue', totalTransferOut: 0, totalTransferIn: 0, overstockedArticles: 0, understockedArticles: 0 };
+      // Agrégation par Famille
+      if (familleId) {
+        if (!familyAnalysis[familleId]) {
+          familyAnalysis[familleId] = { nom: familleNom, totalItems: 0, overstock: 0, rupture: 0, normal: 0, boutiques: {} };
+        }
+        familyAnalysis[familleId].totalItems++;
+        if (status === 'surstock') familyAnalysis[familleId].overstock++;
+        else if (status === 'rupture') familyAnalysis[familleId].rupture++;
+        else familyAnalysis[familleId].normal++;
+
+        if (!familyAnalysis[familleId].boutiques[boutiqueId]) {
+          familyAnalysis[familleId].boutiques[boutiqueId] = { nom: boutiqueNom, totalItems: 0, overstock: 0, rupture: 0, normal: 0 };
+        }
+        familyAnalysis[familleId].boutiques[boutiqueId].totalItems++;
+        if (status === 'surstock') familyAnalysis[familleId].boutiques[boutiqueId].overstock++;
+        else if (status === 'rupture') familyAnalysis[familleId].boutiques[boutiqueId].rupture++;
+        else familyAnalysis[familleId].boutiques[boutiqueId].normal++;
       }
 
-      if (!articlesToRebalance[articleId]) {
-        articlesToRebalance[articleId] = {
-          libelle: articleLibelle,
-          code_article: articleCode,
-          familleNom: familleNom,
-          sousFamilleNom: sousFamilleNom,
-          overstockedBoutiques: [],
-          understockedBoutiques: [],
-          totalOverstock: 0,
-          totalUnderstock: 0,
-        };
+      // Agrégation par Sous-Famille
+      if (sousFamilleId) {
+        if (!subFamilyAnalysis[sousFamilleId]) {
+          subFamilyAnalysis[sousFamilleId] = { nom: sousFamilleNom, familleNom: familleNom, totalItems: 0, overstock: 0, rupture: 0, normal: 0, boutiques: {} };
+        }
+        subFamilyAnalysis[sousFamilleId].totalItems++;
+        if (status === 'surstock') subFamilyAnalysis[sousFamilleId].overstock++;
+        else if (status === 'rupture') subFamilyAnalysis[sousFamilleId].rupture++;
+        else subFamilyAnalysis[sousFamilleId].normal++;
+
+        if (!subFamilyAnalysis[sousFamilleId].boutiques[boutiqueId]) {
+          subFamilyAnalysis[sousFamilleId].boutiques[boutiqueId] = { nom: boutiqueNom, totalItems: 0, overstock: 0, rupture: 0, normal: 0 };
+        }
+        subFamilyAnalysis[sousFamilleId].boutiques[boutiqueId].totalItems++;
+        if (status === 'surstock') subFamilyAnalysis[sousFamilleId].boutiques[boutiqueId].overstock++;
+        else if (status === 'rupture') subFamilyAnalysis[sousFamilleId].boutiques[boutiqueId].rupture++;
+        else subFamilyAnalysis[sousFamilleId].boutiques[boutiqueId].normal++;
       }
 
-      if (status === 'surstock') {
+      // Agrégation par Article
+      if (articleId) {
+        if (!articleAnalysis[articleId]) {
+          articleAnalysis[articleId] = { libelle: articleLibelle, familleNom: familleNom, sousFamilleNom: sousFamilleNom, totalItems: 0, overstock: 0, rupture: 0, normal: 0, boutiques: {} };
+        }
+        articleAnalysis[articleId].totalItems++;
+        if (status === 'surstock') articleAnalysis[articleId].overstock++;
+        else if (status === 'rupture') articleAnalysis[articleId].rupture++;
+        else articleAnalysis[articleId].normal++;
+
+        articleAnalysis[articleId].boutiques[boutiqueId] = { nom: boutiqueNom, stock_actuel: currentStock, stock_min: minStock, stock_max: maxStock, status: status };
+      }
+
+      // Identification des articles en surstock/rupture pour les propositions de transfert
+      if (currentStock > maxStock) {
         overstockedItems.push(item);
-        const overstockQty = item.stock_actuel - item.stock_max;
-        articlesToRebalance[articleId].overstockedBoutiques.push({ boutiqueId, nom: boutiquesMap.get(boutiqueId), quantity: overstockQty });
-        articlesToRebalance[articleId].totalOverstock += overstockQty;
-        boutiqueSummary[boutiqueId].overstockedArticles++;
-      } else if (status === 'rupture') {
+      } else if (currentStock < minStock) {
         understockedItems.push(item);
-        const understockQty = item.stock_min - item.stock_actuel; // Quantity needed to reach min
-        articlesToRebalance[articleId].understockedBoutiques.push({ boutiqueId, nom: boutiquesMap.get(boutiqueId), quantity: understockQty });
-        articlesToRebalance[articleId].totalUnderstock += understockQty;
-        boutiqueSummary[boutiqueId].understockedArticles++;
       }
     });
 
-    // 4. Generate transfer proposals with prioritization logic
+    // 3. Proposer un plan d'équilibrage (logique existante, mais peut être affinée avec l'analyse hiérarchique)
     const transferProposals: any[] = [];
-    const processedOverstockItemsKey = new Set<string>(); // To avoid duplicate processing of an overstock item
 
-    for (const overstockItem of overstockedItems) {
+    overstockedItems.forEach(overstockItem => {
       const articleId = overstockItem.id_article;
       const sourceBoutiqueId = overstockItem.id_boutique;
-      let quantityAvailableFromSource = overstockItem.stock_actuel - overstockItem.stock_max;
+      const sourceStock = overstockItem.stock_actuel;
+      const sourceMaxStock = overstockItem.stock_max;
 
-      if (quantityAvailableFromSource <= 0 || processedOverstockItemsKey.has(`${articleId}-${sourceBoutiqueId}`)) continue;
-
-      // Find potential destinations for this article that are understocked
       const potentialDestinations = understockedItems.filter(
-        destItem => destItem.id_article === articleId && destItem.id_boutique !== sourceBoutiqueId
+        understockItem => understockItem.id_article === articleId && understockItem.id_boutique !== sourceBoutiqueId
       );
 
-      // Sort destinations by average sales (higher sales = higher priority to receive stock)
-      potentialDestinations.sort((a, b) => {
-        const salesA = averageMonthlySales[articleId]?.[a.id_boutique] || 0;
-        const salesB = averageMonthlySales[articleId]?.[b.id_boutique] || 0;
-        return salesB - salesA; // Descending order
-      });
-
-      for (const destItem of potentialDestinations) {
-        if (quantityAvailableFromSource <= 0) break; // No more stock to transfer from source
-
+      potentialDestinations.forEach(destItem => {
         const destBoutiqueId = destItem.id_boutique;
-        let quantityNeededAtDest = destItem.stock_min - destItem.stock_actuel; // Quantity to reach min stock
+        const destStock = destItem.stock_actuel;
+        const destMinStock = destItem.stock_min;
+        const destMaxStock = destItem.stock_max;
 
-        if (quantityNeededAtDest <= 0) continue; // Destination doesn't need stock
+        const quantityNeededAtDest = destMaxStock - destStock;
+        const quantityAvailableFromSource = sourceStock - sourceMaxStock;
 
-        const quantityToTransfer = Math.min(quantityAvailableFromSource, quantityNeededAtDest);
+        let quantityToTransfer = Math.min(quantityAvailableFromSource, quantityNeededAtDest);
 
         if (quantityToTransfer > 0) {
           transferProposals.push({
@@ -155,64 +185,36 @@ serve(async (req) => {
             quantity: quantityToTransfer,
             status: 'pending',
             generated_at: new Date().toISOString(),
-            article_libelle: overstockItem.articles?.libelle,
-            source_boutique_nom: boutiquesMap.get(sourceBoutiqueId),
-            destination_boutique_nom: boutiquesMap.get(destBoutiqueId),
           });
-
-          quantityAvailableFromSource -= quantityToTransfer;
-          // Update destination's needed quantity (conceptually, not in DB yet)
-          // This is important if one source can fulfill part of multiple destinations' needs
-          destItem.stock_actuel += quantityToTransfer; // Simulate stock increase for next iteration
-          
-          // Update boutique summary
-          boutiqueSummary[sourceBoutiqueId].totalTransferOut += quantityToTransfer;
-          boutiqueSummary[destBoutiqueId].totalTransferIn += quantityToTransfer;
         }
-      }
-      processedOverstockItemsKey.add(`${articleId}-${sourceBoutiqueId}`);
-    }
+      });
+    });
 
-    // 5. Insert/Update transfer proposals in the database
-    // For simplicity, let's clear existing pending proposals and insert new ones.
-    // In a real app, you might want to track proposal history or update existing ones.
-    const { error: deleteError } = await supabaseClient
-      .from('transfer_proposals')
-      .delete()
-      .eq('status', 'pending'); // Only delete pending ones
-    if (deleteError) console.error("Error deleting old proposals:", deleteError);
-
+    // 4. Insérer les propositions dans la base de données
     if (transferProposals.length > 0) {
       const { error: insertError } = await supabaseClient
         .from('transfer_proposals')
-        .insert(transferProposals.map(p => ({
-          article_id: p.article_id,
-          source_boutique_id: p.source_boutique_id,
-          destination_boutique_id: p.destination_boutique_id,
-          quantity: p.quantity,
-          status: p.status,
-          generated_at: p.generated_at,
-        })));
+        .insert(transferProposals);
+
       if (insertError) throw insertError;
     }
 
-    // Format articles to rebalance for output
-    const formattedArticlesToRebalance = Object.values(articlesToRebalance).filter(
-      a => a.overstockedBoutiques.length > 0 || a.understockedBoutiques.length > 0
-    );
-
     return new Response(JSON.stringify({
-      message: 'Analyse d\'équilibrage de stock terminée et rapports générés.',
-      recommandations: transferProposals,
-      resumeParBoutique: Object.values(boutiqueSummary),
-      articlesAReequilibrer: formattedArticlesToRebalance,
+      message: 'Analyse hebdomadaire terminée et propositions de transferts générées.',
+      proposalsCount: transferProposals.length,
+      proposals: transferProposals,
+      analysis: {
+        family: familyAnalysis,
+        subFamily: subFamilyAnalysis,
+        article: articleAnalysis,
+      }
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     });
 
-  } catch (error: any) {
-    console.error('Erreur dans la fonction Edge equilibrage-stock:', error.message);
+  } catch (error) {
+    console.error('Erreur dans la fonction Edge weekly-stock-analysis:', error.message);
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 500,

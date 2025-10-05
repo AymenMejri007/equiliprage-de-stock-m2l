@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Loader2, RefreshCw, Download, Check, X } from 'lucide-react'; // Ajout des icônes Check et X
+import { Loader2, RefreshCw, Download, Check, X } from 'lucide-react';
 import { showSuccess, showError, showLoading, dismissToast } from '@/utils/toast';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Separator } from '@/components/ui/separator';
 import { format } from 'date-fns';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'; // Import de useQueryClient
-import { getPendingTransferProposals, acceptTransferProposal, rejectTransferProposal, TransferProposal } from '@/api/transfers'; // Import des nouvelles fonctions
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { getPendingTransferProposals, acceptTransferProposal, rejectTransferProposal, TransferProposal } from '@/api/transfers';
 
 interface BoutiqueSummary {
   nom: string;
@@ -19,7 +19,7 @@ interface BoutiqueSummary {
 
 interface ArticleToRebalance {
   libelle: string;
-  code_article: string;
+  // code_article: string; // Removed
   familleNom: string;
   sousFamilleNom: string;
   overstockedBoutiques: { boutiqueId: string; nom: string; quantity: number }[];
@@ -30,13 +30,13 @@ interface ArticleToRebalance {
 
 interface StockBalancingReport {
   message: string;
-  recommandations: TransferProposal[]; // Utilisation du type TransferProposal
+  recommandations: TransferProposal[];
   resumeParBoutique: BoutiqueSummary[];
   articlesAReequilibrer: ArticleToRebalance[];
 }
 
 const StockBalancing = () => {
-  const queryClient = useQueryClient(); // Initialisation de queryClient
+  const queryClient = useQueryClient();
   const [isLoadingReport, setIsLoadingReport] = useState(false);
   const [report, setReport] = useState<StockBalancingReport | null>(null);
 
@@ -53,10 +53,10 @@ const StockBalancing = () => {
     onSuccess: (data) => {
       if (data.success) {
         showSuccess(data.message || "Proposition acceptée avec succès.");
-        queryClient.invalidateQueries({ queryKey: ['pendingTransferProposals'] }); // Invalider pour rafraîchir la liste
-        queryClient.invalidateQueries({ queryKey: ['stockOverview'] }); // Invalider le tableau de bord
-        queryClient.invalidateQueries({ queryKey: ['stockStatusTable'] }); // Invalider la table de statut
-        queryClient.invalidateQueries({ queryKey: ['transferHistory'] }); // Invalider l'historique des transferts
+        queryClient.invalidateQueries({ queryKey: ['pendingTransferProposals'] });
+        queryClient.invalidateQueries({ queryKey: ['stockOverview'] });
+        queryClient.invalidateQueries({ queryKey: ['stockStatusTable'] });
+        queryClient.invalidateQueries({ queryKey: ['transferHistory'] });
       } else {
         showError(data.message || "Échec de l'acceptation de la proposition.");
       }
@@ -72,7 +72,7 @@ const StockBalancing = () => {
     onSuccess: (data) => {
       if (data.success) {
         showSuccess(data.message || "Proposition rejetée avec succès.");
-        queryClient.invalidateQueries({ queryKey: ['pendingTransferProposals'] }); // Invalider pour rafraîchir la liste
+        queryClient.invalidateQueries({ queryKey: ['pendingTransferProposals'] });
       } else {
         showError(data.message || "Échec du rejet de la proposition.");
       }
@@ -104,7 +104,7 @@ const StockBalancing = () => {
       if (response.ok) {
         showSuccess(result.message);
         setReport(result);
-        queryClient.invalidateQueries({ queryKey: ['pendingTransferProposals'] }); // Rafraîchir les propositions après génération
+        queryClient.invalidateQueries({ queryKey: ['pendingTransferProposals'] });
       } else {
         showError(result.message || "Une erreur est survenue lors de la génération des rapports.");
         console.error("Erreur de l'API:", result);
@@ -357,7 +357,7 @@ const StockBalancing = () => {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Article</TableHead>
-                        <TableHead>Code</TableHead>
+                        {/* <TableHead>Code</TableHead> Removed */}
                         <TableHead>Famille</TableHead>
                         <TableHead>Sous-famille</TableHead>
                         <TableHead className="text-right">Total Surstock</TableHead>
@@ -370,7 +370,7 @@ const StockBalancing = () => {
                       {report.articlesAReequilibrer.map((article, index) => (
                         <TableRow key={index}>
                           <TableCell className="font-medium">{article.libelle}</TableCell>
-                          <TableCell>{article.code_article}</TableCell>
+                          {/* <TableCell>{article.code_article}</TableCell> Removed */}
                           <TableCell>{article.familleNom}</TableCell>
                           <TableCell>{article.sousFamilleNom}</TableCell>
                           <TableCell className="text-right">{article.totalOverstock}</TableCell>

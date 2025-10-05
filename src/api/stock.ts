@@ -11,14 +11,14 @@ export type StockItem = {
   articles: {
     id: string;
     libelle: string;
-    code_article: string;
+    // code_article: string; // Removed
     famille_id: string;
-    sous_famille_id: string | null; // Ajout de sous_famille_id
+    sous_famille_id: string | null;
     familles: {
       id: string;
       nom: string;
     } | null;
-    sous_familles: { // Ajout de sous_familles
+    sous_familles: {
       id: string;
       nom: string;
       famille_id: string;
@@ -48,7 +48,7 @@ export const getStockData = async (): Promise<StockItem[] | null> => {
     .from('stock')
     .select(`
       *,
-      articles (id, libelle, code_article, famille_id, sous_famille_id, familles (id, nom), sous_familles (id, nom, famille_id)),
+      articles (id, libelle, famille_id, sous_famille_id, familles (id, nom), sous_familles (id, nom, famille_id)),
       boutiques (id, nom)
     `);
 
@@ -64,7 +64,7 @@ export const getStockDataByBoutique = async (boutiqueId: string): Promise<StockI
     .from('stock')
     .select(`
       *,
-      articles (id, libelle, code_article, famille_id, sous_famille_id, familles (id, nom), sous_familles (id, nom, famille_id)),
+      articles (id, libelle, famille_id, sous_famille_id, familles (id, nom), sous_familles (id, nom, famille_id)),
       boutiques (id, nom)
     `)
     .eq('id_boutique', boutiqueId);

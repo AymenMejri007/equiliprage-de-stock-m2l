@@ -30,7 +30,7 @@ const GlobalStockList = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4 sm:p-6 lg:p-8">
-      <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-4">Vue d'ensemble des Stocks</h1>
+      <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-4">Vue d'overview des Stocks</h1>
       <p className="text-lg text-gray-600 dark:text-gray-300 mb-8">
         Consultez la liste complète de tous les articles en stock, répartis par boutique.
       </p>
@@ -46,7 +46,7 @@ const GlobalStockList = () => {
               <TableHeader>
                 <TableRow>
                   <TableHead className="min-w-[150px]">Boutique</TableHead>
-                  <TableHead className="min-w-[120px]">Code article</TableHead>
+                  {/* <TableHead className="min-w-[120px]">Code article</TableHead> Removed */}
                   <TableHead className="min-w-[200px]">Libellé</TableHead>
                   <TableHead className="min-w-[150px]">Catégorie</TableHead>
                   <TableHead className="min-w-[150px]">Sous-catégorie</TableHead>
@@ -59,7 +59,7 @@ const GlobalStockList = () => {
                 {stockData.map((item) => (
                   <TableRow key={item.id}>
                     <TableCell>{item.boutiques?.nom || 'N/A'}</TableCell>
-                    <TableCell>{item.articles?.code_article || 'N/A'}</TableCell>
+                    {/* <TableCell>{item.articles?.code_article || 'N/A'}</TableCell> Removed */}
                     <TableCell className="font-medium">{item.articles?.libelle || 'N/A'}</TableCell>
                     <TableCell>{item.articles?.familles?.nom || 'N/A'}</TableCell>
                     <TableCell>{item.articles?.sous_familles?.nom || 'N/A'}</TableCell>

@@ -39,8 +39,8 @@ export const ArticleStockTable: React.FC<ArticleStockTableProps> = ({ boutiqueId
 
     return stockData.filter(item => {
       const articleLibelle = item.articles?.libelle?.toLowerCase() || '';
-      const articleCode = item.articles?.code_article?.toLowerCase() || '';
-      const matchesSearch = articleLibelle.includes(searchTerm.toLowerCase()) || articleCode.includes(searchTerm.toLowerCase());
+      // const articleCode = item.articles?.code_article?.toLowerCase() || ''; // Removed
+      const matchesSearch = articleLibelle.includes(searchTerm.toLowerCase()); // Only search by libelle
 
       const itemFamilleId = item.articles?.famille_id;
       const matchesFamille = selectedFamille === 'all' || itemFamilleId === selectedFamille;
@@ -82,7 +82,7 @@ export const ArticleStockTable: React.FC<ArticleStockTableProps> = ({ boutiqueId
       <CardContent className="p-4">
         <div className="flex flex-wrap gap-4 mb-4 items-center">
           <Input
-            placeholder="Rechercher article/code..."
+            placeholder="Rechercher article..." // Updated placeholder
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="max-w-xs md:max-w-sm"
@@ -130,7 +130,7 @@ export const ArticleStockTable: React.FC<ArticleStockTableProps> = ({ boutiqueId
               <TableHeader>
                 <TableRow>
                   <TableHead className="min-w-[200px]">Article</TableHead>
-                  <TableHead className="min-w-[120px]">Code</TableHead>
+                  {/* <TableHead className="min-w-[120px]">Code</TableHead> Removed */}
                   <TableHead className="min-w-[150px]">Famille</TableHead>
                   <TableHead className="min-w-[150px]">Sous-famille</TableHead>
                   <TableHead className="text-right min-w-[100px]">Stock Actuel</TableHead>
@@ -145,7 +145,7 @@ export const ArticleStockTable: React.FC<ArticleStockTableProps> = ({ boutiqueId
                   return (
                     <TableRow key={item.id}>
                       <TableCell className="font-medium">{item.articles?.libelle || 'N/A'}</TableCell>
-                      <TableCell>{item.articles?.code_article || 'N/A'}</TableCell>
+                      {/* <TableCell>{item.articles?.code_article || 'N/A'}</TableCell> Removed */}
                       <TableCell>{item.articles?.familles?.nom || 'N/A'}</TableCell>
                       <TableCell>{item.articles?.sous_familles?.nom || 'N/A'}</TableCell>
                       <TableCell className="text-right">{item.stock_actuel}</TableCell>
