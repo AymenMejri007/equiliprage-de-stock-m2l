@@ -64,7 +64,7 @@ export const getStockDataByBoutique = async (boutiqueId: string): Promise<StockI
     .from('stock')
     .select(`
       *,
-      articles (id, libelle, code_article, famille_id, familles (id, nom)),
+      articles (id, libelle, code_article, famille_id, sous_famille_id, familles (id, nom), sous_familles (id, nom, famille_id)),
       boutiques (id, nom)
     `)
     .eq('id_boutique', boutiqueId);

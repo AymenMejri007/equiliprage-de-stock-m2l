@@ -6,13 +6,23 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Helper function to determine stock status
+const getStockStatus = (stock_actuel: number, stock_min: number, stock_max: number): 'surstock' | 'rupture' | 'normal' => {
+  if (stock_actuel > stock_max) {
+    return 'surstock';
+  } else if (stock_actuel < stock_min) {
+    return 'rupture';
+  } else {
+    return 'normal';
+  }
+};
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    // Initialiser le client Supabase avec la clé de rôle de service pour un accès complet
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -21,7 +31,18 @@ serve(async (req) => {
     const today = new Date();
     const sixMonthsAgo = new Date(today.setMonth(today.getMonth() - 6));
 
-    // 1. Calculer la rotation moyenne par article (consommation moyenne mensuelle)
+    // 1. Récupérer toutes les données nécessaires (stock, articles, familles, sous-familles, boutiques)
+    const { data: stockData, error: stockError } = await supabaseClient
+      .from('stock')
+      .select(`
+        id, id_boutique, id_article, stock_actuel, stock_min, stock_max,
+        articles (id, libelle, code_article, famille_id, sous_famille_id, familles (id, nom), sous_familles (id, nom, famille_id)),
+        boutiques (id, nom)
+      `);
+
+    if (stockError) throw stockError;
+
+    // 2. Calculer la rotation moyenne par article (consommation moyenne mensuelle)
     const { data: salesData, error: salesError } = await supabaseClient
       .from('ventes')
       .select('id_article, id_boutique, quantite_vendue, date_mois')
@@ -30,7 +51,6 @@ serve(async (req) => {
     if (salesError) throw salesError;
 
     const articleMonthlyConsumption: { [articleId: string]: { [boutiqueId: string]: number[] } } = {};
-
     salesData.forEach(sale => {
       if (!articleMonthlyConsumption[sale.id_article]) {
         articleMonthlyConsumption[sale.id_article] = {};
@@ -46,35 +66,94 @@ serve(async (req) => {
       averageMonthlyConsumption[articleId] = {};
       for (const boutiqueId in articleMonthlyConsumption[articleId]) {
         const totalSales = articleMonthlyConsumption[articleId][boutiqueId].reduce((sum, qty) => sum + qty, 0);
-        // Assuming 6 months of data, calculate average monthly
-        averageMonthlyConsumption[articleId][boutiqueId] = totalSales / 6; 
+        averageMonthlyConsumption[articleId][boutiqueId] = totalSales / 6; // Assuming 6 months of data
       }
     }
 
-    // 2. Récupérer le stock actuel
-    const { data: stockData, error: stockError } = await supabaseClient
-      .from('stock')
-      .select('*, articles(libelle), boutiques(nom)');
-
-    if (stockError) throw stockError;
+    // Structures pour l'analyse hiérarchique
+    const familyAnalysis: { [familleId: string]: { nom: string, totalItems: number, overstock: number, rupture: number, normal: number, boutiques: { [boutiqueId: string]: { nom: string, totalItems: number, overstock: number, rupture: number, normal: number } } } } = {};
+    const subFamilyAnalysis: { [sousFamilleId: string]: { nom: string, familleNom: string, totalItems: number, overstock: number, rupture: number, normal: number, boutiques: { [boutiqueId: string]: { nom: string, totalItems: number, overstock: number, rupture: number, normal: number } } } } = {};
+    const articleAnalysis: { [articleId: string]: { libelle: string, code_article: string, familleNom: string, sousFamilleNom: string, totalItems: number, overstock: number, rupture: number, normal: number, boutiques: { [boutiqueId: string]: { nom: string, stock_actuel: number, stock_min: number, stock_max: number, status: string } } } } = {};
 
     const overstockedItems: any[] = [];
-    const understockedItems: any[] = []; // Inclut rupture et bas niveau
+    const understockedItems: any[] = [];
 
     stockData.forEach(item => {
       const currentStock = item.stock_actuel;
       const minStock = item.stock_min;
       const maxStock = item.stock_max;
+      const status = getStockStatus(currentStock, minStock, maxStock);
 
+      const boutiqueId = item.id_boutique;
+      const boutiqueNom = item.boutiques?.nom || 'Inconnue';
+      const articleId = item.id_article;
+      const articleLibelle = item.articles?.libelle || 'Inconnu';
+      const articleCode = item.articles?.code_article || 'N/A';
+      const familleId = item.articles?.famille_id;
+      const familleNom = item.articles?.familles?.nom || 'Non classé';
+      const sousFamilleId = item.articles?.sous_famille_id;
+      const sousFamilleNom = item.articles?.sous_familles?.nom || 'Non classée';
+
+      // Agrégation par Famille
+      if (familleId) {
+        if (!familyAnalysis[familleId]) {
+          familyAnalysis[familleId] = { nom: familleNom, totalItems: 0, overstock: 0, rupture: 0, normal: 0, boutiques: {} };
+        }
+        familyAnalysis[familleId].totalItems++;
+        if (status === 'surstock') familyAnalysis[familleId].overstock++;
+        else if (status === 'rupture') familyAnalysis[familleId].rupture++;
+        else familyAnalysis[familleId].normal++;
+
+        if (!familyAnalysis[familleId].boutiques[boutiqueId]) {
+          familyAnalysis[familleId].boutiques[boutiqueId] = { nom: boutiqueNom, totalItems: 0, overstock: 0, rupture: 0, normal: 0 };
+        }
+        familyAnalysis[familleId].boutiques[boutiqueId].totalItems++;
+        if (status === 'surstock') familyAnalysis[familleId].boutiques[boutiqueId].overstock++;
+        else if (status === 'rupture') familyAnalysis[familleId].boutiques[boutiqueId].rupture++;
+        else familyAnalysis[familleId].boutiques[boutiqueId].normal++;
+      }
+
+      // Agrégation par Sous-Famille
+      if (sousFamilleId) {
+        if (!subFamilyAnalysis[sousFamilleId]) {
+          subFamilyAnalysis[sousFamilleId] = { nom: sousFamilleNom, familleNom: familleNom, totalItems: 0, overstock: 0, rupture: 0, normal: 0, boutiques: {} };
+        }
+        subFamilyAnalysis[sousFamilleId].totalItems++;
+        if (status === 'surstock') subFamilyAnalysis[sousFamilleId].overstock++;
+        else if (status === 'rupture') subFamilyAnalysis[sousFamilleId].rupture++;
+        else subFamilyAnalysis[sousFamilleId].normal++;
+
+        if (!subFamilyAnalysis[sousFamilleId].boutiques[boutiqueId]) {
+          subFamilyAnalysis[sousFamilleId].boutiques[boutiqueId] = { nom: boutiqueNom, totalItems: 0, overstock: 0, rupture: 0, normal: 0 };
+        }
+        subFamilyAnalysis[sousFamilleId].boutiques[boutiqueId].totalItems++;
+        if (status === 'surstock') subFamilyAnalysis[sousFamilleId].boutiques[boutiqueId].overstock++;
+        else if (status === 'rupture') subFamilyAnalysis[sousFamilleId].boutiques[boutiqueId].rupture++;
+        else subFamilyAnalysis[sousFamilleId].boutiques[boutiqueId].normal++;
+      }
+
+      // Agrégation par Article
+      if (articleId) {
+        if (!articleAnalysis[articleId]) {
+          articleAnalysis[articleId] = { libelle: articleLibelle, code_article: articleCode, familleNom: familleNom, sousFamilleNom: sousFamilleNom, totalItems: 0, overstock: 0, rupture: 0, normal: 0, boutiques: {} };
+        }
+        articleAnalysis[articleId].totalItems++;
+        if (status === 'surstock') articleAnalysis[articleId].overstock++;
+        else if (status === 'rupture') articleAnalysis[articleId].rupture++;
+        else articleAnalysis[articleId].normal++;
+
+        articleAnalysis[articleId].boutiques[boutiqueId] = { nom: boutiqueNom, stock_actuel: currentStock, stock_min: minStock, stock_max: maxStock, status: status };
+      }
+
+      // Identification des articles en surstock/rupture pour les propositions de transfert
       if (currentStock > maxStock) {
         overstockedItems.push(item);
       } else if (currentStock < minStock) {
         understockedItems.push(item);
       }
-      // On pourrait ajouter une condition pour "bas niveau" si stock_actuel est entre min et un seuil
     });
 
-    // 3. Proposer un plan d'équilibrage
+    // 3. Proposer un plan d'équilibrage (logique existante, mais peut être affinée avec l'analyse hiérarchique)
     const transferProposals: any[] = [];
 
     overstockedItems.forEach(overstockItem => {
@@ -83,7 +162,6 @@ serve(async (req) => {
       const sourceStock = overstockItem.stock_actuel;
       const sourceMaxStock = overstockItem.stock_max;
 
-      // Trouver les boutiques en rupture/bas niveau pour le même article
       const potentialDestinations = understockedItems.filter(
         understockItem => understockItem.id_article === articleId && understockItem.id_boutique !== sourceBoutiqueId
       );
@@ -94,17 +172,10 @@ serve(async (req) => {
         const destMinStock = destItem.stock_min;
         const destMaxStock = destItem.stock_max;
 
-        // Calcul de la quantité transférable
-        // Option 1: Basé sur le surstock de la source et le besoin de la destination (jusqu'au max)
         const quantityNeededAtDest = destMaxStock - destStock;
         const quantityAvailableFromSource = sourceStock - sourceMaxStock;
 
         let quantityToTransfer = Math.min(quantityAvailableFromSource, quantityNeededAtDest);
-
-        // Option 2: Basé sur la rotation moyenne (si plus pertinent)
-        // const avgConsumptionDest = averageMonthlyConsumption[articleId]?.[destBoutiqueId] || 0;
-        // const quantityBasedOnRotation = Math.max(0, avgConsumptionDest * 2 - destStock); // Ex: 2 mois de stock
-        // quantityToTransfer = Math.min(quantityToTransfer, quantityBasedOnRotation);
 
         if (quantityToTransfer > 0) {
           transferProposals.push({
@@ -132,6 +203,11 @@ serve(async (req) => {
       message: 'Analyse hebdomadaire terminée et propositions de transferts générées.',
       proposalsCount: transferProposals.length,
       proposals: transferProposals,
+      analysis: {
+        family: familyAnalysis,
+        subFamily: subFamilyAnalysis,
+        article: articleAnalysis,
+      }
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
