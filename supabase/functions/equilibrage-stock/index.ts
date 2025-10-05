@@ -78,6 +78,10 @@ serve(async (req) => {
     const overstockedItems: any[] = [];
     const understockedItems: any[] = [];
 
+    // Initialize boutique summaries
+    const boutiqueSummaries: { [boutiqueId: string]: { nom: string, totalTransferOut: number, totalTransferIn: number, overstockedArticles: number, understockedArticles: number } } = {};
+    const uniqueBoutiques = new Map<string, string>(); // id -> nom
+
     stockData.forEach(item => {
       const currentStock = item.stock_actuel;
       const minStock = item.stock_min;
@@ -88,11 +92,15 @@ serve(async (req) => {
       const boutiqueNom = item.boutiques?.nom || 'Inconnue';
       const articleId = item.id_article;
       const articleLibelle = item.articles?.libelle || 'Inconnu';
-      // const articleCode = item.articles?.code_article || 'N/A'; // Removed
       const familleId = item.articles?.famille_id;
       const familleNom = item.articles?.familles?.nom || 'Non classé';
       const sousFamilleId = item.articles?.sous_famille_id;
       const sousFamilleNom = item.articles?.sous_familles?.nom || 'Non classée';
+
+      if (!uniqueBoutiques.has(boutiqueId)) {
+        uniqueBoutiques.set(boutiqueId, boutiqueNom);
+        boutiqueSummaries[boutiqueId] = { nom: boutiqueNom, totalTransferOut: 0, totalTransferIn: 0, overstockedArticles: 0, understockedArticles: 0 };
+      }
 
       // Agrégation par Famille
       if (familleId) {
@@ -148,8 +156,10 @@ serve(async (req) => {
       // Identification des articles en surstock/rupture pour les propositions de transfert
       if (currentStock > maxStock) {
         overstockedItems.push(item);
+        boutiqueSummaries[boutiqueId].overstockedArticles++;
       } else if (currentStock < minStock) {
         understockedItems.push(item);
+        boutiqueSummaries[boutiqueId].understockedArticles++;
       }
     });
 
@@ -185,7 +195,13 @@ serve(async (req) => {
             quantity: quantityToTransfer,
             status: 'pending',
             generated_at: new Date().toISOString(),
+            articles: overstockItem.articles, // Include article details for client
+            source_boutique: overstockItem.boutiques, // Include boutique details for client
+            destination_boutique: destItem.boutiques, // Include boutique details for client
           });
+          // Update transfer counts for boutique summaries
+          boutiqueSummaries[sourceBoutiqueId].totalTransferOut += quantityToTransfer;
+          boutiqueSummaries[destBoutiqueId].totalTransferIn += quantityToTransfer;
         }
       });
     });
@@ -194,15 +210,43 @@ serve(async (req) => {
     if (transferProposals.length > 0) {
       const { error: insertError } = await supabaseClient
         .from('transfer_proposals')
-        .insert(transferProposals);
-
+        .insert(transferProposals.map(p => ({
+          article_id: p.article_id,
+          source_boutique_id: p.source_boutique_id,
+          destination_boutique_id: p.destination_boutique_id,
+          quantity: p.quantity,
+          status: p.status,
+          generated_at: p.generated_at,
+        }))); // Only insert relevant columns
       if (insertError) throw insertError;
+    }
+
+    // Calculate articlesAReequilibrer (articles that have both overstock and rupture across boutiques)
+    const articlesAReequilibrer: any[] = [];
+    for (const articleId in articleAnalysis) {
+      const article = articleAnalysis[articleId];
+      if (article.overstock > 0 && article.rupture > 0) {
+        const overstockedBoutiques = Object.values(article.boutiques).filter(b => b.status === 'surstock').map(b => ({ boutiqueId: Object.keys(article.boutiques).find(key => article.boutiques[key] === b), nom: b.nom, quantity: b.stock_actuel - b.stock_max }));
+        const understockedBoutiques = Object.values(article.boutiques).filter(b => b.status === 'rupture').map(b => ({ boutiqueId: Object.keys(article.boutiques).find(key => article.boutiques[key] === b), nom: b.nom, quantity: b.stock_min - b.stock_actuel }));
+
+        articlesAReequilibrer.push({
+          libelle: article.libelle,
+          familleNom: article.familleNom,
+          sousFamilleNom: article.sousFamilleNom,
+          totalOverstock: article.overstock,
+          totalUnderstock: article.rupture,
+          overstockedBoutiques: overstockedBoutiques,
+          understockedBoutiques: understockedBoutiques,
+        });
+      }
     }
 
     return new Response(JSON.stringify({
       message: 'Analyse hebdomadaire terminée et propositions de transferts générées.',
       proposalsCount: transferProposals.length,
-      proposals: transferProposals,
+      proposals: transferProposals, // Renamed from 'recommandations' to 'proposals'
+      resumeParBoutique: Object.values(boutiqueSummaries),
+      articlesAReequilibrer: articlesAReequilibrer,
       analysis: {
         family: familyAnalysis,
         subFamily: subFamilyAnalysis,
@@ -214,7 +258,7 @@ serve(async (req) => {
     });
 
   } catch (error) {
-    console.error('Erreur dans la fonction Edge weekly-stock-analysis:', error.message);
+    console.error('Erreur dans la fonction Edge equilibrage-stock:', error.message);
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 500,

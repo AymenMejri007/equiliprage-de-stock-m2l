@@ -8,6 +8,7 @@ import { Separator } from '@/components/ui/separator';
 import { format } from 'date-fns';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getPendingTransferProposals, acceptTransferProposal, rejectTransferProposal, TransferProposal } from '@/api/transfers';
+import { StockBalancingSummary } from '@/components/stock-balancing/StockBalancingSummary'; // Import du nouveau composant
 
 interface BoutiqueSummary {
   nom: string;
@@ -19,7 +20,6 @@ interface BoutiqueSummary {
 
 interface ArticleToRebalance {
   libelle: string;
-  // code_article: string; // Removed
   familleNom: string;
   sousFamilleNom: string;
   overstockedBoutiques: { boutiqueId: string; nom: string; quantity: number }[];
@@ -28,11 +28,38 @@ interface ArticleToRebalance {
   totalUnderstock: number;
 }
 
+interface ArticleAnalysisItem {
+  libelle: string;
+  familleNom: string;
+  sousFamilleNom: string;
+  totalItems: number;
+  overstock: number;
+  rupture: number;
+  normal: number;
+  boutiques: {
+    [boutiqueId: string]: {
+      nom: string;
+      stock_actuel: number;
+      stock_min: number;
+      stock_max: number;
+      status: string;
+    };
+  };
+}
+
 interface StockBalancingReport {
   message: string;
-  recommandations: TransferProposal[];
+  proposalsCount: number;
+  proposals: TransferProposal[]; // Renamed from 'recommandations' to 'proposals'
   resumeParBoutique: BoutiqueSummary[];
   articlesAReequilibrer: ArticleToRebalance[];
+  analysis: {
+    family: any;
+    subFamily: any;
+    article: {
+      [articleId: string]: ArticleAnalysisItem;
+    };
+  };
 }
 
 const StockBalancing = () => {
@@ -57,6 +84,8 @@ const StockBalancing = () => {
         queryClient.invalidateQueries({ queryKey: ['stockOverview'] });
         queryClient.invalidateQueries({ queryKey: ['stockStatusTable'] });
         queryClient.invalidateQueries({ queryKey: ['transferHistory'] });
+        queryClient.invalidateQueries({ queryKey: ['globalStockList'] });
+        queryClient.invalidateQueries({ queryKey: ['stockDataByBoutique'] }); // Invalider pour BoutiqueDetail
       } else {
         showError(data.message || "Échec de l'acceptation de la proposition.");
       }
@@ -174,6 +203,8 @@ const StockBalancing = () => {
 
       <Separator className="my-8" />
 
+      {report && <StockBalancingSummary report={report} />} {/* Nouveau composant de résumé */}
+
       {/* Propositions de Transfert en Attente */}
       <Card className="mb-8">
         <CardHeader>
@@ -252,12 +283,12 @@ const StockBalancing = () => {
                 <CardTitle>Dernières Recommandations Générées</CardTitle>
                 <CardDescription>Liste détaillée des transferts de stock proposés lors de la dernière génération.</CardDescription>
               </div>
-              <Button variant="outline" size="sm" onClick={() => downloadReport(report.recommandations, 'recommandations_transfert.json')}>
+              <Button variant="outline" size="sm" onClick={() => downloadReport(report.proposals, 'recommandations_transfert.json')}>
                 <Download className="mr-2 h-4 w-4" /> Télécharger JSON
               </Button>
             </CardHeader>
             <CardContent>
-              {report.recommandations.length === 0 ? (
+              {report.proposals.length === 0 ? (
                 <p className="text-gray-500 text-center">Aucune recommandation de transfert générée lors de la dernière analyse.</p>
               ) : (
                 <div className="overflow-x-auto rounded-md border">
@@ -273,7 +304,7 @@ const StockBalancing = () => {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {report.recommandations.map((rec, index) => (
+                      {report.proposals.map((rec, index) => (
                         <TableRow key={index}>
                           <TableCell>{format(new Date(rec.generated_at), 'dd/MM/yyyy HH:mm')}</TableCell>
                           <TableCell>{rec.articles?.libelle || 'N/A'}</TableCell>
@@ -357,7 +388,6 @@ const StockBalancing = () => {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Article</TableHead>
-                        {/* <TableHead>Code</TableHead> Removed */}
                         <TableHead>Famille</TableHead>
                         <TableHead>Sous-famille</TableHead>
                         <TableHead className="text-right">Total Surstock</TableHead>
@@ -370,7 +400,6 @@ const StockBalancing = () => {
                       {report.articlesAReequilibrer.map((article, index) => (
                         <TableRow key={index}>
                           <TableCell className="font-medium">{article.libelle}</TableCell>
-                          {/* <TableCell>{article.code_article}</TableCell> Removed */}
                           <TableCell>{article.familleNom}</TableCell>
                           <TableCell>{article.sousFamilleNom}</TableCell>
                           <TableCell className="text-right">{article.totalOverstock}</TableCell>
