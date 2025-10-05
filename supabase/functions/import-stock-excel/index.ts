@@ -38,7 +38,6 @@ serve(async (req) => {
 
     for (const row of rows) {
       try {
-        // Nouveaux noms de colonnes
         const depotNom = row['Dépôt'];
         const marqueArticle = row['MARQUE'];
         const categoriePrincipaleNom = row['CATEGORIE PRINCIPALE'];
@@ -48,11 +47,12 @@ serve(async (req) => {
         const colorisArticle = row['Coloris'];
         const codeBarresArticle = row['Code-barres article'];
         const stockActuel = parseInt(row['Physique']);
+        const ventesFO = parseInt(row['Ventes FO']); // Nouvelle colonne
         const stockMax = parseInt(row['Stock maximum']);
         const stockMin = parseInt(row['Stock minimum']);
 
         if (!depotNom || !categoriePrincipaleNom || !codeArticle || !libelleArticle || isNaN(stockActuel) || isNaN(stockMin) || isNaN(stockMax)) {
-          errors.push({ row, message: 'Missing required data or invalid numbers' });
+          errors.push({ row, message: 'Missing required data or invalid numbers for stock' });
           continue;
         }
 
@@ -135,9 +135,9 @@ serve(async (req) => {
               libelle: libelleArticle,
               famille_id: familleId,
               sous_famille_id: sousFamilleId,
-              marque: marqueArticle, // Nouvelle colonne
-              coloris: colorisArticle, // Nouvelle colonne
-              code_barres_article: codeBarresArticle, // Nouvelle colonne
+              marque: marqueArticle,
+              coloris: colorisArticle,
+              code_barres_article: codeBarresArticle,
             })
             .select('id')
             .single();
@@ -169,6 +169,33 @@ serve(async (req) => {
         }
         processedRows.push(stockUpsertData);
 
+        // 6. Process Ventes FO (if valid)
+        if (!isNaN(ventesFO) && ventesFO >= 0) {
+          const monthlySalesQuantity = Math.round(ventesFO / 6); // Arrondir à l'entier le plus proche
+          const salesToInsert = [];
+          const today = new Date();
+
+          for (let i = 0; i < 6; i++) {
+            const date = new Date(today.getFullYear(), today.getMonth() - i, 1);
+            salesToInsert.push({
+              id_boutique: boutiqueId,
+              id_article: articleId,
+              date_mois: date.toISOString().split('T')[0], // Format YYYY-MM-DD
+              quantite_vendue: monthlySalesQuantity,
+            });
+          }
+
+          const { error: salesUpsertError } = await supabaseClient
+            .from('ventes')
+            .upsert(salesToInsert, { onConflict: 'id_boutique,id_article,date_mois' });
+
+          if (salesUpsertError) {
+            console.error("Sales upsert error:", salesUpsertError);
+            // Ne pas bloquer l'importation entière pour une erreur de vente
+            errors.push({ row, message: `Error upserting sales data: ${salesUpsertError.message}` });
+          }
+        }
+
       } catch (rowError: any) {
         console.error("Error processing row:", row, rowError);
         errors.push({ row, message: rowError.message || 'Unknown error' });
@@ -176,7 +203,7 @@ serve(async (req) => {
     }
 
     return new Response(JSON.stringify({
-      message: `Importation terminée. ${processedRows.length} lignes traitées. ${errors.length} erreurs.`,
+      message: `Importation terminée. ${processedRows.length} lignes de stock traitées. ${errors.length} erreurs.`,
       processedRows: processedRows.length,
       errors: errors,
     }), {
