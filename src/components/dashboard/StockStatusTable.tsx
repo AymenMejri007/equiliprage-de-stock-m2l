@@ -4,6 +4,7 @@ import { getStockData, getStockStatus, StockStatus } from '@/api/stock';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'; // Import des Tooltip
 
 export const StockStatusTable: React.FC = () => {
   const { data: stockData, isLoading, error } = useQuery({
@@ -77,57 +78,74 @@ export const StockStatusTable: React.FC = () => {
 
   const getCellColor = (familleNom: string, boutiqueNom: string) => {
     const data = aggregatedData[familleNom]?.[boutiqueNom];
-    if (!data || data.totalItems === 0) return 'bg-gray-200 dark:bg-gray-700'; // Pas de données
+    if (!data || data.totalItems === 0) return 'bg-gray-100 dark:bg-gray-800 text-gray-500'; // Pas de données
     
     const overstockRatio = data.overstock / data.totalItems;
     const outOfStockRatio = data.outOfStock / data.totalItems;
 
-    if (outOfStockRatio > 0.2) { // Plus de 20% en rupture
-      return 'bg-red-500 text-white';
-    } else if (overstockRatio > 0.2) { // Plus de 20% en surstock
-      return 'bg-green-500 text-white';
-    } else if (outOfStockRatio > 0 || overstockRatio > 0) { // Quelques ruptures ou surstocks
-      return 'bg-yellow-300 dark:bg-yellow-600';
+    if (outOfStockRatio > 0.3) { // Plus de 30% en rupture (rouge foncé)
+      return 'bg-red-600 text-white';
+    } else if (outOfStockRatio > 0.1) { // Plus de 10% en rupture (rouge clair)
+      return 'bg-red-400 text-white';
+    } else if (overstockRatio > 0.3) { // Plus de 30% en surstock (vert foncé)
+      return 'bg-green-600 text-white';
+    } else if (overstockRatio > 0.1) { // Plus de 10% en surstock (vert clair)
+      return 'bg-green-400 text-white';
+    } else if (data.outOfStock > 0 || data.overstock > 0) { // Quelques ruptures ou surstocks (jaune)
+      return 'bg-yellow-300 dark:bg-yellow-600 text-gray-900 dark:text-white';
     }
-    return 'bg-gray-300 dark:bg-gray-600'; // Normal
+    return 'bg-blue-100 dark:bg-blue-800 text-blue-900 dark:text-blue-100'; // Normal (bleu clair)
   };
 
-  const getCellTooltip = (familleNom: string, boutiqueNom: string) => {
+  const getCellTooltipContent = (familleNom: string, boutiqueNom: string) => {
     const data = aggregatedData[familleNom]?.[boutiqueNom];
-    if (!data || data.totalItems === 0) return "Aucune donnée";
-    return `Total: ${data.totalItems}\nNormal: ${data.normal}\nSurstock: ${data.overstock}\nRupture: ${data.outOfStock}`;
+    if (!data || data.totalItems === 0) return "Aucune donnée de stock pour cette combinaison.";
+    return (
+      <div>
+        <p>Total articles: {data.totalItems}</p>
+        <p>Stock normal: {data.normal}</p>
+        <p>Surstock: {data.overstock}</p>
+        <p>Rupture: {data.outOfStock}</p>
+      </div>
+    );
   };
 
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto rounded-md border">
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="sticky left-0 bg-background z-10">Famille / Boutique</TableHead>
+            <TableHead className="sticky left-0 bg-background z-20 min-w-[150px]">Famille / Boutique</TableHead>
             {sortedBoutiques.map(boutiqueNom => (
-              <TableHead key={boutiqueNom} className="text-center">{boutiqueNom}</TableHead>
+              <TableHead key={boutiqueNom} className="text-center min-w-[120px]">{boutiqueNom}</TableHead>
             ))}
           </TableRow>
         </TableHeader>
         <TableBody>
           {sortedFamilles.map(familleNom => (
             <TableRow key={familleNom}>
-              <TableCell className="font-medium sticky left-0 bg-background z-10">{familleNom}</TableCell>
+              <TableCell className="font-medium sticky left-0 bg-background z-20">{familleNom}</TableCell>
               {sortedBoutiques.map(boutiqueNom => (
-                <TableCell
-                  key={`${familleNom}-${boutiqueNom}`}
-                  className={cn("text-center p-2", getCellColor(familleNom, boutiqueNom))}
-                  title={getCellTooltip(familleNom, boutiqueNom)}
-                >
-                  {/* Vous pouvez afficher un résumé ou laisser vide pour un effet "heatmap" pur */}
-                  {aggregatedData[familleNom]?.[boutiqueNom]?.totalItems > 0 ? (
-                    <span className="text-xs">
-                      R: {aggregatedData[familleNom][boutiqueNom].outOfStock} / S: {aggregatedData[familleNom][boutiqueNom].overstock}
-                    </span>
-                  ) : (
-                    '-'
-                  )}
-                </TableCell>
+                <TooltipProvider key={`${familleNom}-${boutiqueNom}`}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <TableCell
+                        className={cn("text-center p-2 cursor-help", getCellColor(familleNom, boutiqueNom))}
+                      >
+                        {aggregatedData[familleNom]?.[boutiqueNom]?.totalItems > 0 ? (
+                          <span className="text-xs font-semibold">
+                            R: {aggregatedData[familleNom][boutiqueNom].outOfStock} / S: {aggregatedData[familleNom][boutiqueNom].overstock}
+                          </span>
+                        ) : (
+                          '-'
+                        )}
+                      </TableCell>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      {getCellTooltipContent(familleNom, boutiqueNom)}
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               ))}
             </TableRow>
           ))}

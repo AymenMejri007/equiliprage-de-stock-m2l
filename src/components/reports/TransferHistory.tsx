@@ -29,29 +29,29 @@ export const TransferHistory: React.FC = () => {
   }
 
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto rounded-md border">
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Date</TableHead>
-            <TableHead>Article</TableHead>
-            <TableHead>Source</TableHead>
-            <TableHead>Destination</TableHead>
-            <TableHead className="text-right">Quantité</TableHead>
-            <TableHead>Statut</TableHead>
+            <TableHead className="min-w-[150px]">Date</TableHead>
+            <TableHead className="min-w-[200px]">Article</TableHead>
+            <TableHead className="min-w-[150px]">Source</TableHead>
+            <TableHead className="min-w-[150px]">Destination</TableHead>
+            <TableHead className="text-right min-w-[100px]">Quantité</TableHead>
+            <TableHead className="min-w-[120px]">Statut</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {transfers.map((transfer) => (
             <TableRow key={transfer.id}>
               <TableCell>{format(new Date(transfer.created_at), 'dd/MM/yyyy HH:mm')}</TableCell>
-              <TableCell>{transfer.articles?.libelle || 'N/A'}</TableCell>
+              <TableCell className="font-medium">{transfer.articles?.libelle || 'N/A'}</TableCell>
               <TableCell>{transfer.source_boutique?.nom || 'N/A'}</TableCell>
               <TableCell>{transfer.destination_boutique?.nom || 'N/A'}</TableCell>
               <TableCell className="text-right">{transfer.quantite}</TableCell>
               <TableCell>
                 <Badge variant={transfer.statut === 'completed' ? 'default' : 'secondary'}>
-                  {transfer.statut}
+                  {transfer.statut.charAt(0).toUpperCase() + transfer.statut.slice(1)}
                 </Badge>
               </TableCell>
             </TableRow>

@@ -4,7 +4,7 @@ import { getStockData } from '@/api/stock';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Loader2 } from 'lucide-react';
 import { MadeWithDyad } from "@/components/made-with-dyad";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 
 const GlobalStockList = () => {
   const { data: stockData, isLoading, error } = useQuery({
@@ -30,25 +30,29 @@ const GlobalStockList = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4 sm:p-6 lg:p-8">
-      <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-6">Vue d'ensemble des Stocks</h1>
+      <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-4">Vue d'ensemble des Stocks</h1>
+      <p className="text-lg text-gray-600 dark:text-gray-300 mb-8">
+        Consultez la liste complète de tous les articles en stock, répartis par boutique.
+      </p>
       
       <Card>
         <CardHeader>
           <CardTitle>Tous les Articles en Stock</CardTitle>
+          <CardDescription>Un aperçu global de l'inventaire de toutes les boutiques.</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto rounded-md border">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Boutique</TableHead>
-                  <TableHead>Code article</TableHead>
-                  <TableHead>Libellé</TableHead>
-                  <TableHead>Catégorie</TableHead>
-                  <TableHead>Sous-catégorie</TableHead>
-                  <TableHead className="text-right">Stock actuel</TableHead>
-                  <TableHead className="text-right">Stock min</TableHead>
-                  <TableHead className="text-right">Stock max</TableHead>
+                  <TableHead className="min-w-[150px]">Boutique</TableHead>
+                  <TableHead className="min-w-[120px]">Code article</TableHead>
+                  <TableHead className="min-w-[200px]">Libellé</TableHead>
+                  <TableHead className="min-w-[150px]">Catégorie</TableHead>
+                  <TableHead className="min-w-[150px]">Sous-catégorie</TableHead>
+                  <TableHead className="text-right min-w-[100px]">Stock actuel</TableHead>
+                  <TableHead className="text-right min-w-[100px]">Stock min</TableHead>
+                  <TableHead className="text-right min-w-[100px]">Stock max</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -69,8 +73,6 @@ const GlobalStockList = () => {
           </div>
         </CardContent>
       </Card>
-
-      <MadeWithDyad />
     </div>
   );
 };

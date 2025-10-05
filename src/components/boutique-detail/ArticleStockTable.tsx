@@ -6,7 +6,7 @@ import { Loader2 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { StockStatusBadge } from '@/components/dashboard/StockStatusBadge';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 
 interface ArticleStockTableProps {
   boutiqueId: string;
@@ -57,14 +57,16 @@ export const ArticleStockTable: React.FC<ArticleStockTableProps> = ({ boutiqueId
 
   if (isLoadingStock || isLoadingFamilles || isLoadingSousFamilles) {
     return (
-      <div className="flex justify-center items-center p-4">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
+      <Card className="p-4">
+        <div className="flex justify-center items-center p-4">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </Card>
     );
   }
 
   if (errorStock || errorFamilles || errorSousFamilles) {
-    return <div className="text-red-500 text-center p-4">Erreur de chargement des données.</div>;
+    return <Card className="p-4"><div className="text-red-500 text-center p-4">Erreur de chargement des données.</div></Card>;
   }
 
   const availableSousFamilles = selectedFamille === 'all'
@@ -73,16 +75,20 @@ export const ArticleStockTable: React.FC<ArticleStockTableProps> = ({ boutiqueId
 
   return (
     <Card>
+      <CardHeader>
+        <CardTitle>Articles en Stock</CardTitle>
+        <CardDescription>Liste détaillée des articles et de leur statut de stock pour la boutique sélectionnée.</CardDescription>
+      </CardHeader>
       <CardContent className="p-4">
-        <div className="flex flex-wrap gap-4 mb-4">
+        <div className="flex flex-wrap gap-4 mb-4 items-center">
           <Input
-            placeholder="Rechercher par article ou code..."
+            placeholder="Rechercher article/code..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="max-w-sm"
+            className="max-w-xs md:max-w-sm"
           />
           <Select onValueChange={setSelectedFamille} value={selectedFamille}>
-            <SelectTrigger className="w-[180px]">
+            <SelectTrigger className="w-full md:w-[180px]">
               <SelectValue placeholder="Filtrer par famille" />
             </SelectTrigger>
             <SelectContent>
@@ -93,7 +99,7 @@ export const ArticleStockTable: React.FC<ArticleStockTableProps> = ({ boutiqueId
             </SelectContent>
           </Select>
           <Select onValueChange={setSelectedSousFamille} value={selectedSousFamille} disabled={!selectedFamille || selectedFamille === 'all'}>
-            <SelectTrigger className="w-[180px]">
+            <SelectTrigger className="w-full md:w-[180px]">
               <SelectValue placeholder="Filtrer par sous-famille" />
             </SelectTrigger>
             <SelectContent>
@@ -104,7 +110,7 @@ export const ArticleStockTable: React.FC<ArticleStockTableProps> = ({ boutiqueId
             </SelectContent>
           </Select>
           <Select onValueChange={setSelectedStockStatus} value={selectedStockStatus}>
-            <SelectTrigger className="w-[180px]">
+            <SelectTrigger className="w-full md:w-[180px]">
               <SelectValue placeholder="Filtrer par statut" />
             </SelectTrigger>
             <SelectContent>
@@ -119,18 +125,18 @@ export const ArticleStockTable: React.FC<ArticleStockTableProps> = ({ boutiqueId
         {filteredStockData.length === 0 ? (
           <div className="text-gray-500 text-center p-4">Aucun article trouvé avec les filtres appliqués.</div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto rounded-md border">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Article</TableHead>
-                  <TableHead>Code</TableHead>
-                  <TableHead>Famille</TableHead>
-                  <TableHead>Sous-famille</TableHead>
-                  <TableHead className="text-right">Stock Actuel</TableHead>
-                  <TableHead className="text-right">Stock Min</TableHead>
-                  <TableHead className="text-right">Stock Max</TableHead>
-                  <TableHead>Statut</TableHead>
+                  <TableHead className="min-w-[200px]">Article</TableHead>
+                  <TableHead className="min-w-[120px]">Code</TableHead>
+                  <TableHead className="min-w-[150px]">Famille</TableHead>
+                  <TableHead className="min-w-[150px]">Sous-famille</TableHead>
+                  <TableHead className="text-right min-w-[100px]">Stock Actuel</TableHead>
+                  <TableHead className="text-right min-w-[100px]">Stock Min</TableHead>
+                  <TableHead className="text-right min-w-[100px]">Stock Max</TableHead>
+                  <TableHead className="min-w-[120px]">Statut</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
