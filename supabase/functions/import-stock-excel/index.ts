@@ -62,7 +62,7 @@ serve(async (req) => {
     const boutiquesToInsert: { id: string, nom: string }[] = [];
     const famillesToInsert: { id: string, nom: string }[] = [];
     const sousFamillesToInsert: { id: string, nom: string, famille_id: string }[] = [];
-    const articlesToUpsertMap = new Map<string, any>(); // Clé: code_article
+    const articlesToUpsertMap = new Map<string, any>(); // Clé: code_article (normalisé)
     const stockToUpsertMap = new Map<string, any>();    // Clé: `${id_boutique}-${id_article}`
     const ventesToUpsertMap = new Map<string, any>();    // Clé: `${id_boutique}-${id_article}-${date_mois}`
 
@@ -91,7 +91,7 @@ serve(async (req) => {
         // Normalisation de codeArticle
         const codeArticle = codeArticleRaw ? String(codeArticleRaw).trim().toLowerCase() : null;
 
-        // NEW: Validation for codeArticle if it's the unique key
+        // Rendre Code article obligatoire pour l'identification unique
         if (!codeArticle) {
           errors.push({ row, message: 'Missing Code article (mandatory for unique identification)' });
           continue;
@@ -157,11 +157,23 @@ serve(async (req) => {
         }
 
         let articleId: string;
-        // Use codeArticle for identification as it's the unique key
-        const existingArticleId = articleByCodeArticleMap.get(codeArticle); // Use codeArticle map
+        const existingArticleIdInDB = articleByCodeArticleMap.get(codeArticle);
+        const existingArticleInMap = articlesToUpsertMap.get(codeArticle);
+
+        if (existingArticleInMap) {
+            // Si déjà traité dans ce lot, utiliser son ID
+            articleId = existingArticleInMap.id;
+        } else if (existingArticleIdInDB) {
+            // Si existe dans la DB, utiliser son ID
+            articleId = existingArticleIdInDB;
+        } else {
+            // Article vraiment nouveau, générer un nouvel ID
+            articleId = crypto.randomUUID();
+        }
 
         const articlePayload: any = {
-          code_article: codeArticle, // Use normalized codeArticle
+          id: articleId, // Toujours inclure l'ID pour l'upsert
+          code_article: codeArticle, // Utiliser codeArticle normalisé
           libelle: libelleArticle,
           famille_id: familleId,
           sous_famille_id: sousFamilleId,
@@ -169,22 +181,11 @@ serve(async (req) => {
           coloris: colorisArticle,
           code_barres_article: codeBarresArticle,
         };
+        articlesToUpsertMap.set(codeArticle, articlePayload); // Stocker le dernier payload pour ce codeArticle
+        // Mettre à jour les maps pour les lignes suivantes dans le même lot
+        articleByCodeArticleMap.set(codeArticle, articleId);
+        articleByCodeBarresArticleMap.set(codeBarresArticle, articleId);
 
-        if (existingArticleId) {
-          articleId = existingArticleId;
-          articlesToUpsertMap.set(codeArticle, { // Key the map by codeArticle
-            id: articleId,
-            ...articlePayload,
-          });
-        } else {
-          articleId = crypto.randomUUID();
-          articlesToUpsertMap.set(codeArticle, { // Key the map by codeArticle
-            id: articleId,
-            ...articlePayload,
-          });
-          articleByCodeArticleMap.set(codeArticle, articleId); // Update map for subsequent rows
-          // No need to update articleByCodeBarresArticleMap here, as code_article is the primary conflict key
-        }
 
         stockToUpsertMap.set(`${boutiqueId}-${articleId}`, {
           id_boutique: boutiqueId,
@@ -238,7 +239,7 @@ serve(async (req) => {
     if (articlesToUpsert.length > 0) {
       const { error: upsertError } = await supabaseClient
         .from('articles')
-        .upsert(articlesToUpsert, { onConflict: 'code_article' }); // Garder onConflict sur code_article
+        .upsert(articlesToUpsert, { onConflict: 'code_article' }); // onConflict sur code_article
       if (upsertError) throw upsertError;
     }
 
