@@ -8,7 +8,8 @@ import NotFound from "./pages/NotFound";
 import Dashboard from "./pages/Dashboard";
 import Reports from "./pages/Reports";
 import BoutiqueDetail from "./pages/BoutiqueDetail";
-import GlobalStockList from "./pages/GlobalStockList"; // Importez la nouvelle page GlobalStockList
+import GlobalStockList from "./pages/GlobalStockList";
+import ImportStock from "./pages/ImportStock"; // Importez la nouvelle page ImportStock
 
 const queryClient = new QueryClient();
 
@@ -23,7 +24,8 @@ const App = () => (
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/reports" element={<Reports />} />
           <Route path="/boutique-detail" element={<BoutiqueDetail />} />
-          <Route path="/global-stock" element={<GlobalStockList />} /> {/* Nouvelle route pour la liste de stock globale */}
+          <Route path="/global-stock" element={<GlobalStockList />} />
+          <Route path="/import-stock" element={<ImportStock />} /> {/* Nouvelle route pour l'importation */}
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
