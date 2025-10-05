@@ -155,14 +155,37 @@ serve(async (req) => {
 
         // --- Gestion manuelle de l'upsert pour les articles ---
         let articleId: string;
-        const { data: existingArticle, error: fetchArticleError } = await supabaseClient
+        let existingArticleData: { id: string } | null = null;
+
+        // 1. Try to find by code_barres_article (most reliable unique identifier)
+        const { data: articleByBarcode, error: errBarcode } = await supabaseClient
           .from('articles')
           .select('id')
           .eq('code_barres_article', codeBarresArticle)
           .single();
+        
+        if (errBarcode && errBarcode.code !== 'PGRST116') { // PGRST116 means no rows found
+            throw errBarcode;
+        }
+        
+        if (articleByBarcode) {
+            articleId = articleByBarcode.id;
+            existingArticleData = articleByBarcode;
+        } else if (codeArticle) { // 2. If not found by barcode, try by code_article
+            const { data: articleByCode, error: errCode } = await supabaseClient
+                .from('articles')
+                .select('id')
+                .eq('code_article', codeArticle)
+                .single();
 
-        if (fetchArticleError && fetchArticleError.code !== 'PGRST116') { // PGRST116 means no rows found
-          throw fetchArticleError;
+            if (errCode && errCode.code !== 'PGRST116') {
+                throw errCode;
+            }
+
+            if (articleByCode) {
+                articleId = articleByCode.id;
+                existingArticleData = articleByCode;
+            }
         }
 
         const articlePayload: any = {
@@ -175,14 +198,15 @@ serve(async (req) => {
           code_barres_article: codeBarresArticle,
         };
 
-        if (existingArticle) {
-          articleId = existingArticle.id;
+        if (existingArticleData) {
+          // Update existing article
           const { error: updateArticleError } = await supabaseClient
             .from('articles')
             .update(articlePayload)
-            .eq('id', articleId);
+            .eq('id', articleId!);
           if (updateArticleError) throw updateArticleError;
         } else {
+          // Insert new article
           articleId = crypto.randomUUID();
           const { error: insertArticleError } = await supabaseClient
             .from('articles')
