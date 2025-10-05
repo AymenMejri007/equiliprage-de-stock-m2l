@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
-import { readExcel, Workbook } from "https://deno.land/x/excel_reader@v0.0.1/mod.ts"; // Changement ici
+import * as XLSX from 'https://esm.sh/xlsx'; // Changement ici : Utilisation de xlsx via esm.sh
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -29,31 +29,9 @@ serve(async (req) => {
     }
 
     const arrayBuffer = await file.arrayBuffer();
-    const workbook: Workbook = await readExcel(new Uint8Array(arrayBuffer)); // Utilisation de readExcel et conversion en Uint8Array
+    const workbook = XLSX.read(arrayBuffer, { type: 'array' }); // Lecture du fichier Excel
     const sheetName = workbook.SheetNames[0];
-    const sheet = workbook.Sheets[sheetName];
-
-    // Manual conversion from sheet to JSON rows (deno_excel doesn't have a direct sheet_to_json)
-    const headerCells = Object.keys(sheet).filter(key => key.match(/^[A-Z]1$/)).sort();
-    const headers = headerCells.map(h => sheet[h].v);
-
-    const rows: any[] = [];
-    let rowIndex = 2; // Start from second row (data rows)
-    while (true) {
-      const rowData: { [key: string]: any } = {};
-      let hasDataInRow = false;
-      for (let i = 0; i < headers.length; i++) {
-        const cellAddress = `${String.fromCharCode(65 + i)}${rowIndex}`;
-        const cell = sheet[cellAddress];
-        if (cell && cell.v !== undefined) {
-          rowData[headers[i]] = cell.v;
-          hasDataInRow = true;
-        }
-      }
-      if (!hasDataInRow) break;
-      rows.push(rowData);
-      rowIndex++;
-    }
+    const rows: any[] = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]); // Conversion directe en JSON
 
     const processedRows: any[] = [];
     const errors: any[] = [];
