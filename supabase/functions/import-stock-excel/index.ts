@@ -33,7 +33,6 @@ serve(async (req) => {
     const sheetName = workbook.SheetNames[0];
     const rows: any[] = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
 
-    const processedRows: any[] = [];
     const errors: any[] = [];
 
     // --- 1. Pré-chargement et mise en cache des données existantes ---
@@ -55,9 +54,9 @@ serve(async (req) => {
     const articleMap = new Map(existingArticles.map(a => [a.code_article, a.id]));
 
     // --- Collecteurs pour les opérations groupées ---
-    const boutiquesToInsert: { nom: string }[] = [];
-    const famillesToInsert: { nom: string }[] = [];
-    const sousFamillesToInsert: { nom: string, famille_id: string }[] = [];
+    const boutiquesToInsert: { id: string, nom: string }[] = [];
+    const famillesToInsert: { id: string, nom: string }[] = [];
+    const sousFamillesToInsert: { id: string, nom: string, famille_id: string }[] = [];
     const articlesToUpsert: any[] = []; // Peut être upsert car code_article est unique
     const stockToUpsert: any[] = [];
     const ventesToUpsert: any[] = [];
@@ -89,7 +88,7 @@ serve(async (req) => {
           // Ajouter à la liste d'insertion et au cache pour les lignes suivantes
           const newBoutiqueId = crypto.randomUUID(); // Générer un UUID côté fonction
           boutiquesToInsert.push({ id: newBoutiqueId, nom: depotNom });
-          boutiqueMap.set(depotNom, newBoutiqueId);
+          boutiqueMap.set(depotNom, newBoutiqueId); // Mettre à jour la map pour les lignes suivantes du même fichier
           boutiqueId = newBoutiqueId;
         }
 
@@ -121,7 +120,7 @@ serve(async (req) => {
           articleId = articleMap.get(codeArticle)!;
           // Si l'article existe, nous voulons le mettre à jour avec les dernières infos
           articlesToUpsert.push({
-            id: articleId,
+            id: articleId, // ID existant
             code_article: codeArticle,
             libelle: libelleArticle,
             famille_id: familleId,
@@ -133,7 +132,7 @@ serve(async (req) => {
         } else {
           const newArticleId = crypto.randomUUID();
           articlesToUpsert.push({
-            id: newArticleId,
+            id: newArticleId, // Nouvel ID
             code_article: codeArticle,
             libelle: libelleArticle,
             famille_id: familleId,
@@ -142,7 +141,7 @@ serve(async (req) => {
             coloris: colorisArticle,
             code_barres_article: codeBarresArticle,
           });
-          articleMap.set(codeArticle, newArticleId);
+          articleMap.set(codeArticle, newArticleId); // Mettre à jour la map pour les lignes suivantes du même fichier
           articleId = newArticleId;
         }
 
