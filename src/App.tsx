@@ -10,7 +10,8 @@ import Reports from "./pages/Reports";
 import BoutiqueDetail from "./pages/BoutiqueDetail";
 import GlobalStockList from "./pages/GlobalStockList";
 import ImportStock from "./pages/ImportStock";
-import { AppLayout } from "./components/layout/AppLayout"; // Importez le nouveau layout
+import StockBalancing from "./pages/StockBalancing"; // Importez la nouvelle page
+import { AppLayout } from "./components/layout/AppLayout";
 
 const queryClient = new QueryClient();
 
@@ -21,15 +22,15 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<AppLayout />}> {/* Utilisez AppLayout comme route parente */}
-            <Route index element={<Index />} /> {/* La page d'accueil sera rendue dans l'Outlet de AppLayout */}
+          <Route path="/" element={<AppLayout />}>
+            <Route index element={<Index />} />
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="reports" element={<Reports />} />
             <Route path="boutique-detail" element={<BoutiqueDetail />} />
             <Route path="global-stock" element={<GlobalStockList />} />
             <Route path="import-stock" element={<ImportStock />} />
+            <Route path="stock-balancing" element={<StockBalancing />} /> {/* Nouvelle route */}
           </Route>
-          {/* La route NotFound reste en dehors du layout */}
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

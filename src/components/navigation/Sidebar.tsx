@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { Home, LayoutDashboard, FileText, Store, List, Upload, Menu } from 'lucide-react'; // Ajout de l'icône Menu
+import { Home, LayoutDashboard, FileText, Store, List, Upload, Menu, GitCompareArrows } from 'lucide-react'; // Ajout de l'icône GitCompareArrows
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
@@ -19,6 +19,7 @@ const navLinks: NavLinkItem[] = [
   { to: "/boutique-detail", icon: Store, label: "Détail Boutique" },
   { to: "/global-stock", icon: List, label: "Stock Global" },
   { to: "/import-stock", icon: Upload, label: "Importer Stock" },
+  { to: "/stock-balancing", icon: GitCompareArrows, label: "Équilibrage Stock" }, // Nouveau lien
 ];
 
 const SidebarContent: React.FC = () => (
@@ -49,7 +50,7 @@ export const Sidebar: React.FC = () => {
       <Sheet>
         <SheetTrigger asChild>
           <Button variant="outline" size="icon" className="shrink-0 md:hidden">
-            <Menu className="h-5 w-5" /> {/* Utilisation de l'icône Menu pour le toggle */}
+            <Menu className="h-5 w-5" />
             <span className="sr-only">Toggle navigation menu</span>
           </Button>
         </SheetTrigger>
