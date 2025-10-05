@@ -60,7 +60,7 @@ serve(async (req) => {
     const boutiquesToInsert: { id: string, nom: string }[] = [];
     const famillesToInsert: { id: string, nom: string }[] = [];
     const sousFamillesToInsert: { id: string, nom: string, famille_id: string }[] = [];
-    const articlesToUpsert: any[] = [];
+    const articlesToUpsert: any[] = []; // Cet array contiendra les payloads pour l'upsert des articles
     const stockToUpsert: any[] = [];
     const ventesToUpsert: any[] = [];
 
@@ -143,37 +143,36 @@ serve(async (req) => {
         }
 
         let articleId: string;
-        if (articleMap.has(codeBarresArticle)) {
-          articleId = articleMap.get(codeBarresArticle)!;
-          articlesToUpsert.push({
-            id: articleId,
-            code_article: codeArticle || null, // Rendre nullable
-            libelle: libelleArticle,
-            famille_id: familleId,
-            sous_famille_id: sousFamilleId,
-            marque: marqueArticle,
-            coloris: colorisArticle,
-            code_barres_article: codeBarresArticle,
-          });
+        const existingArticleId = articleMap.get(codeBarresArticle);
+
+        const articlePayload: any = {
+          code_article: codeArticle || null, // Rendre nullable
+          libelle: libelleArticle,
+          famille_id: familleId,
+          sous_famille_id: sousFamilleId,
+          marque: marqueArticle,
+          coloris: colorisArticle,
+          code_barres_article: codeBarresArticle,
+        };
+
+        if (existingArticleId) {
+          articleId = existingArticleId;
+          // Pour les articles existants, nous n'incluons pas l'ID dans le payload d'upsert.
+          // L'upsert se basera sur 'code_barres_article' pour trouver et mettre à jour la ligne existante,
+          // sans tenter de modifier son ID primaire.
+          articlesToUpsert.push(articlePayload);
         } else {
-          const newArticleId = crypto.randomUUID();
+          articleId = crypto.randomUUID();
           articlesToUpsert.push({
-            id: newArticleId,
-            code_article: codeArticle || null, // Rendre nullable
-            libelle: libelleArticle,
-            famille_id: familleId,
-            sous_famille_id: sousFamilleId,
-            marque: marqueArticle,
-            coloris: colorisArticle,
-            code_barres_article: codeBarresArticle,
+            id: articleId, // L'ID est fourni uniquement pour les nouvelles insertions
+            ...articlePayload,
           });
-          articleMap.set(codeBarresArticle, newArticleId);
-          articleId = newArticleId;
+          articleMap.set(codeBarresArticle, articleId); // Mettre à jour la map pour les lignes suivantes dans le même lot
         }
 
         stockToUpsert.push({
           id_boutique: boutiqueId,
-          id_article: articleId,
+          id_article: articleId, // Cet articleId est correctement résolu (existant ou nouveau)
           stock_actuel: stockActuel,
           stock_min: stockMin,
           stock_max: stockMax,
