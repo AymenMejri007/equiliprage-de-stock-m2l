@@ -9,7 +9,8 @@ import Dashboard from "./pages/Dashboard";
 import Reports from "./pages/Reports";
 import BoutiqueDetail from "./pages/BoutiqueDetail";
 import GlobalStockList from "./pages/GlobalStockList";
-import ImportStock from "./pages/ImportStock"; // Importez la nouvelle page ImportStock
+import ImportStock from "./pages/ImportStock";
+import { AppLayout } from "./components/layout/AppLayout"; // Importez le nouveau layout
 
 const queryClient = new QueryClient();
 
@@ -20,13 +21,15 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Index />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/reports" element={<Reports />} />
-          <Route path="/boutique-detail" element={<BoutiqueDetail />} />
-          <Route path="/global-stock" element={<GlobalStockList />} />
-          <Route path="/import-stock" element={<ImportStock />} /> {/* Nouvelle route pour l'importation */}
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+          <Route path="/" element={<AppLayout />}> {/* Utilisez AppLayout comme route parente */}
+            <Route index element={<Index />} /> {/* La page d'accueil sera rendue dans l'Outlet de AppLayout */}
+            <Route path="dashboard" element={<Dashboard />} />
+            <Route path="reports" element={<Reports />} />
+            <Route path="boutique-detail" element={<BoutiqueDetail />} />
+            <Route path="global-stock" element={<GlobalStockList />} />
+            <Route path="import-stock" element={<ImportStock />} />
+          </Route>
+          {/* La route NotFound reste en dehors du layout */}
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
