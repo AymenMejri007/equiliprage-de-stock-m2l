@@ -75,7 +75,7 @@ export const ExcelImportForm: React.FC = () => {
         <div className="grid gap-4">
           <p className="text-sm text-muted-foreground">
             Le fichier Excel doit contenir les colonnes suivantes (respectez la casse) :<br />
-            <code>Dépôt</code>, <code>MARQUE</code>, <code>CATEGORIE PRINCIPALE</code>, <code>SOUS-CATEGORIE</code> (optionnel), <code>Code article</code>, <code>Libellé article</code>, <code>Coloris</code> (optionnel), <code>Code-barres article</code> (optionnel), <code>Physique</code>, <code>Stock maximum</code>, <code>Stock minimum</code>. La colonne <code>Ventes FO</code> sera ignorée.
+            <code>Dépôt</code>, <code>MARQUE</code>, <code>CATEGORIE PRINCIPALE</code>, <code>SOUS-CATEGORIE</code> (optionnel), <code>Code article</code>, <code>Libellé article</code>, <code>Coloris</code> (optionnel), <code>Code-barres article</code> (optionnel), <code>Physique</code>, <code>Ventes FO</code>, <code>Stock maximum</code>, <code>Stock minimum</code>. La colonne <code>Ventes FO</code> est utilisée pour calculer les ventes mensuelles moyennes sur les 6 derniers mois.
           </p>
           <div className="flex items-center space-x-2">
             <Input
