@@ -1,23 +1,13 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Loader2, RefreshCw, Download } from 'lucide-react';
+import { Loader2, RefreshCw, Download, Check, X } from 'lucide-react'; // Ajout des icônes Check et X
 import { showSuccess, showError, showLoading, dismissToast } from '@/utils/toast';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Separator } from '@/components/ui/separator';
 import { format } from 'date-fns';
-
-interface TransferRecommendation {
-  article_id: string;
-  source_boutique_id: string;
-  destination_boutique_id: string;
-  quantity: number;
-  status: string;
-  generated_at: string;
-  article_libelle: string;
-  source_boutique_nom: string;
-  destination_boutique_nom: string;
-}
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'; // Import de useQueryClient
+import { getPendingTransferProposals, acceptTransferProposal, rejectTransferProposal, TransferProposal } from '@/api/transfers'; // Import des nouvelles fonctions
 
 interface BoutiqueSummary {
   nom: string;
@@ -40,17 +30,60 @@ interface ArticleToRebalance {
 
 interface StockBalancingReport {
   message: string;
-  recommandations: TransferRecommendation[];
+  recommandations: TransferProposal[]; // Utilisation du type TransferProposal
   resumeParBoutique: BoutiqueSummary[];
   articlesAReequilibrer: ArticleToRebalance[];
 }
 
 const StockBalancing = () => {
-  const [isLoading, setIsLoading] = useState(false);
+  const queryClient = useQueryClient(); // Initialisation de queryClient
+  const [isLoadingReport, setIsLoadingReport] = useState(false);
   const [report, setReport] = useState<StockBalancingReport | null>(null);
 
+  // Récupération des propositions de transfert en attente
+  const { data: pendingProposals, isLoading: isLoadingPendingProposals, error: errorPendingProposals } = useQuery<TransferProposal[] | null>({
+    queryKey: ['pendingTransferProposals'],
+    queryFn: getPendingTransferProposals,
+  });
+
+  // Mutation pour accepter une proposition
+  const acceptMutation = useMutation({
+    mutationFn: ({ proposalId, articleId, sourceBoutiqueId, destinationBoutiqueId, quantity }: { proposalId: string; articleId: string; sourceBoutiqueId: string; destinationBoutiqueId: string; quantity: number }) =>
+      acceptTransferProposal(proposalId, articleId, sourceBoutiqueId, destinationBoutiqueId, quantity),
+    onSuccess: (data) => {
+      if (data.success) {
+        showSuccess(data.message || "Proposition acceptée avec succès.");
+        queryClient.invalidateQueries({ queryKey: ['pendingTransferProposals'] }); // Invalider pour rafraîchir la liste
+        queryClient.invalidateQueries({ queryKey: ['stockOverview'] }); // Invalider le tableau de bord
+        queryClient.invalidateQueries({ queryKey: ['stockStatusTable'] }); // Invalider la table de statut
+        queryClient.invalidateQueries({ queryKey: ['transferHistory'] }); // Invalider l'historique des transferts
+      } else {
+        showError(data.message || "Échec de l'acceptation de la proposition.");
+      }
+    },
+    onError: (error: any) => {
+      showError(`Erreur lors de l'acceptation: ${error.message}`);
+    },
+  });
+
+  // Mutation pour rejeter une proposition
+  const rejectMutation = useMutation({
+    mutationFn: (proposalId: string) => rejectTransferProposal(proposalId),
+    onSuccess: (data) => {
+      if (data.success) {
+        showSuccess(data.message || "Proposition rejetée avec succès.");
+        queryClient.invalidateQueries({ queryKey: ['pendingTransferProposals'] }); // Invalider pour rafraîchir la liste
+      } else {
+        showError(data.message || "Échec du rejet de la proposition.");
+      }
+    },
+    onError: (error: any) => {
+      showError(`Erreur lors du rejet: ${error.message}`);
+    },
+  });
+
   const handleGenerateReport = async () => {
-    setIsLoading(true);
+    setIsLoadingReport(true);
     const loadingToastId = showLoading("Génération des rapports d'équilibrage de stock...");
 
     try {
@@ -63,7 +96,7 @@ const StockBalancing = () => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({}), // Pas de corps spécifique nécessaire pour cette fonction
+        body: JSON.stringify({}),
       });
 
       const result: StockBalancingReport = await response.json();
@@ -71,6 +104,7 @@ const StockBalancing = () => {
       if (response.ok) {
         showSuccess(result.message);
         setReport(result);
+        queryClient.invalidateQueries({ queryKey: ['pendingTransferProposals'] }); // Rafraîchir les propositions après génération
       } else {
         showError(result.message || "Une erreur est survenue lors de la génération des rapports.");
         console.error("Erreur de l'API:", result);
@@ -80,11 +114,25 @@ const StockBalancing = () => {
       console.error("Erreur de génération de rapport:", error);
     } finally {
       dismissToast(loadingToastId);
-      setIsLoading(false);
+      setIsLoadingReport(false);
     }
   };
 
-  // Fonction pour télécharger les données en JSON (pour l'instant)
+  const handleAccept = (proposal: TransferProposal) => {
+    acceptMutation.mutate({
+      proposalId: proposal.id,
+      articleId: proposal.article_id,
+      sourceBoutiqueId: proposal.source_boutique_id,
+      destinationBoutiqueId: proposal.destination_boutique_id,
+      quantity: proposal.quantity,
+    });
+  };
+
+  const handleReject = (proposalId: string) => {
+    rejectMutation.mutate(proposalId);
+  };
+
+  // Fonction pour télécharger les données en JSON
   const downloadReport = (data: any, filename: string) => {
     const jsonStr = JSON.stringify(data, null, 2);
     const blob = new Blob([jsonStr], { type: 'application/json' });
@@ -113,8 +161,8 @@ const StockBalancing = () => {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Button onClick={handleGenerateReport} disabled={isLoading}>
-            {isLoading ? (
+          <Button onClick={handleGenerateReport} disabled={isLoadingReport}>
+            {isLoadingReport ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
               <RefreshCw className="mr-2 h-4 w-4" />
@@ -124,14 +172,85 @@ const StockBalancing = () => {
         </CardContent>
       </Card>
 
+      <Separator className="my-8" />
+
+      {/* Propositions de Transfert en Attente */}
+      <Card className="mb-8">
+        <CardHeader>
+          <CardTitle>Propositions de Transfert en Attente</CardTitle>
+          <CardDescription>Examinez et validez les transferts de stock proposés.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {isLoadingPendingProposals ? (
+            <div className="flex justify-center items-center p-4">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          ) : errorPendingProposals ? (
+            <p className="text-red-500 text-center">Erreur de chargement des propositions de transfert.</p>
+          ) : !pendingProposals || pendingProposals.length === 0 ? (
+            <p className="text-gray-500 text-center">Aucune proposition de transfert en attente pour le moment.</p>
+          ) : (
+            <div className="overflow-x-auto rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date Génération</TableHead>
+                    <TableHead>Article</TableHead>
+                    <TableHead>Source</TableHead>
+                    <TableHead>Destination</TableHead>
+                    <TableHead className="text-right">Quantité</TableHead>
+                    <TableHead className="text-center">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {pendingProposals.map((proposal) => (
+                    <TableRow key={proposal.id}>
+                      <TableCell>{format(new Date(proposal.generated_at), 'dd/MM/yyyy HH:mm')}</TableCell>
+                      <TableCell>{proposal.articles?.libelle || 'N/A'}</TableCell>
+                      <TableCell>{proposal.source_boutique?.nom || 'N/A'}</TableCell>
+                      <TableCell>{proposal.destination_boutique?.nom || 'N/A'}</TableCell>
+                      <TableCell className="text-right">{proposal.quantity}</TableCell>
+                      <TableCell className="text-center">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleAccept(proposal)}
+                          disabled={acceptMutation.isPending || rejectMutation.isPending}
+                          className="text-green-600 hover:text-green-800"
+                        >
+                          <Check className="h-4 w-4" />
+                          <span className="sr-only">Accepter</span>
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleReject(proposal.id)}
+                          disabled={acceptMutation.isPending || rejectMutation.isPending}
+                          className="text-red-600 hover:text-red-800"
+                        >
+                          <X className="h-4 w-4" />
+                          <span className="sr-only">Rejeter</span>
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Separator className="my-8" />
+
       {report && (
         <div className="space-y-8">
-          {/* Recommandations de Transfert */}
+          {/* Recommandations de Transfert (historique des dernières générées) */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
-                <CardTitle>Recommandations de Transfert</CardTitle>
-                <CardDescription>Liste détaillée des transferts de stock proposés.</CardDescription>
+                <CardTitle>Dernières Recommandations Générées</CardTitle>
+                <CardDescription>Liste détaillée des transferts de stock proposés lors de la dernière génération.</CardDescription>
               </div>
               <Button variant="outline" size="sm" onClick={() => downloadReport(report.recommandations, 'recommandations_transfert.json')}>
                 <Download className="mr-2 h-4 w-4" /> Télécharger JSON
@@ -139,7 +258,7 @@ const StockBalancing = () => {
             </CardHeader>
             <CardContent>
               {report.recommandations.length === 0 ? (
-                <p className="text-gray-500 text-center">Aucune recommandation de transfert pour le moment.</p>
+                <p className="text-gray-500 text-center">Aucune recommandation de transfert générée lors de la dernière analyse.</p>
               ) : (
                 <div className="overflow-x-auto rounded-md border">
                   <Table>
@@ -157,9 +276,9 @@ const StockBalancing = () => {
                       {report.recommandations.map((rec, index) => (
                         <TableRow key={index}>
                           <TableCell>{format(new Date(rec.generated_at), 'dd/MM/yyyy HH:mm')}</TableCell>
-                          <TableCell>{rec.article_libelle}</TableCell>
-                          <TableCell>{rec.source_boutique_nom}</TableCell>
-                          <TableCell>{rec.destination_boutique_nom}</TableCell>
+                          <TableCell>{rec.articles?.libelle || 'N/A'}</TableCell>
+                          <TableCell>{rec.source_boutique?.nom || 'N/A'}</TableCell>
+                          <TableCell>{rec.destination_boutique?.nom || 'N/A'}</TableCell>
                           <TableCell className="text-right">{rec.quantity}</TableCell>
                           <TableCell>{rec.status}</TableCell>
                         </TableRow>
