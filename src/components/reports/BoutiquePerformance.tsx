@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { getBoutiques, getStockDataByBoutique } from '@/api/reports';
-import { getStockStatus } from '@/api/stock';
+import { getBoutiques } from '@/api/reports';
+import { getStockDataByBoutique, getStockStatus } from '@/api/stock'; // Import correct
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2 } from 'lucide-react';

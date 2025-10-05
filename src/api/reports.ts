@@ -59,20 +59,3 @@ export const getBoutiques = async (): Promise<Boutique[] | null> => {
   }
   return data as Boutique[];
 };
-
-export const getStockDataByBoutique = async (boutiqueId: string): Promise<StockItem[] | null> => {
-  const { data, error } = await supabase
-    .from('stock')
-    .select(`
-      *,
-      articles (id, libelle, code_article, famille_id, familles (id, nom)),
-      boutiques (id, nom)
-    `)
-    .eq('id_boutique', boutiqueId);
-
-  if (error) {
-    console.error(`Erreur lors de la récupération des données de stock pour la boutique ${boutiqueId}:`, error);
-    return null;
-  }
-  return data as StockItem[];
-};
