@@ -11,14 +11,14 @@ interface UserProfile {
   first_name: string | null;
   last_name: string | null;
   avatar_url: string | null;
-  role: 'admin' | 'user'; // Ajout du rôle
+  role: 'admin' | 'user';
 }
 
 interface SessionContextType {
   session: Session | null;
-  user: (User & { profile?: UserProfile }) | null; // Enrichir l'objet User avec le profil
+  user: (User & { profile?: UserProfile }) | null;
   isLoading: boolean;
-  userRole: 'admin' | 'user' | null; // Rôle de l'utilisateur
+  userRole: 'admin' | 'user' | null;
 }
 
 const SessionContext = createContext<SessionContextType | undefined>(undefined);
@@ -32,7 +32,10 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
   const location = useLocation();
 
   useEffect(() => {
+    console.log("SessionContextProvider: useEffect déclenché.");
+
     const fetchUserProfile = async (userId: string) => {
+      console.log("SessionContextProvider: Récupération du profil utilisateur pour userId:", userId);
       const { data, error } = await supabase
         .from('profiles')
         .select('id, first_name, last_name, avatar_url, role')
@@ -40,23 +43,25 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
         .single();
 
       if (error) {
-        console.error("Error fetching user profile:", error);
+        console.error("SessionContextProvider: Erreur lors de la récupération du profil utilisateur:", error);
         return null;
       }
+      console.log("SessionContextProvider: Profil utilisateur récupéré:", data);
       return data as UserProfile;
     };
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
+      console.log("SessionContextProvider: onAuthStateChange event:", event, "session:", currentSession);
       setSession(currentSession);
       if (currentSession?.user) {
         const profile = await fetchUserProfile(currentSession.user.id);
         setUser({ ...currentSession.user, profile });
-        setUserRole(profile?.role || 'user'); // Définir le rôle par défaut si non trouvé
+        setUserRole(profile?.role || 'user');
       } else {
         setUser(null);
         setUserRole(null);
       }
-      setIsLoading(false);
+      setIsLoading(false); // Important: set to false when auth state is determined
 
       if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
         if (location.pathname === '/login' || location.pathname === '/') {
@@ -70,6 +75,7 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
     });
 
     supabase.auth.getSession().then(async ({ data: { session: initialSession } }) => {
+      console.log("SessionContextProvider: Résultat initial de getSession:", initialSession);
       setSession(initialSession);
       if (initialSession?.user) {
         const profile = await fetchUserProfile(initialSession.user.id);
@@ -79,7 +85,7 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
         setUser(null);
         setUserRole(null);
       }
-      setIsLoading(false);
+      setIsLoading(false); // Important: set to false when initial session is determined
 
       if (!initialSession && location.pathname !== '/login') {
         navigate('/login');
@@ -88,8 +94,13 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      console.log("SessionContextProvider: Nettoyage de l'abonnement onAuthStateChange.");
+      subscription.unsubscribe();
+    };
   }, [navigate, location.pathname]);
+
+  console.log("SessionContextProvider: Rendu - isLoading:", isLoading, "session:", session, "user:", user, "userRole:", userRole);
 
   if (isLoading) {
     return (
