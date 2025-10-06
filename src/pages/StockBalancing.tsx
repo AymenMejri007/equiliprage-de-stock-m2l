@@ -8,7 +8,7 @@ import { Separator } from '@/components/ui/separator';
 import { format } from 'date-fns';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getPendingTransferProposals, acceptTransferProposal, rejectTransferProposal, TransferProposal } from '@/api/transfers';
-import { StockBalancingSummary } from '@/components/stock-balancing/StockBalancingSummary'; // Import du nouveau composant
+import { StockBalancingSummary } from '@/components/stock-balancing/StockBalancingSummary';
 
 interface BoutiqueSummary {
   nom: string;
@@ -50,7 +50,7 @@ interface ArticleAnalysisItem {
 interface StockBalancingReport {
   message: string;
   proposalsCount: number;
-  proposals: TransferProposal[]; // Renamed from 'recommandations' to 'proposals'
+  proposals: TransferProposal[];
   resumeParBoutique: BoutiqueSummary[];
   articlesAReequilibrer: ArticleToRebalance[];
   analysis: {
@@ -67,13 +67,11 @@ const StockBalancing = () => {
   const [isLoadingReport, setIsLoadingReport] = useState(false);
   const [report, setReport] = useState<StockBalancingReport | null>(null);
 
-  // Récupération des propositions de transfert en attente
   const { data: pendingProposals, isLoading: isLoadingPendingProposals, error: errorPendingProposals } = useQuery<TransferProposal[] | null>({
     queryKey: ['pendingTransferProposals'],
     queryFn: getPendingTransferProposals,
   });
 
-  // Mutation pour accepter une proposition
   const acceptMutation = useMutation({
     mutationFn: ({ proposalId, articleId, sourceBoutiqueId, destinationBoutiqueId, quantity }: { proposalId: string; articleId: string; sourceBoutiqueId: string; destinationBoutiqueId: string; quantity: number }) =>
       acceptTransferProposal(proposalId, articleId, sourceBoutiqueId, destinationBoutiqueId, quantity),
@@ -85,7 +83,7 @@ const StockBalancing = () => {
         queryClient.invalidateQueries({ queryKey: ['stockStatusTable'] });
         queryClient.invalidateQueries({ queryKey: ['transferHistory'] });
         queryClient.invalidateQueries({ queryKey: ['globalStockList'] });
-        queryClient.invalidateQueries({ queryKey: ['stockDataByBoutique'] }); // Invalider pour BoutiqueDetail
+        queryClient.invalidateQueries({ queryKey: ['stockDataByBoutique'] });
       } else {
         showError(data.message || "Échec de l'acceptation de la proposition.");
       }
@@ -95,7 +93,6 @@ const StockBalancing = () => {
     },
   });
 
-  // Mutation pour rejeter une proposition
   const rejectMutation = useMutation({
     mutationFn: (proposalId: string) => rejectTransferProposal(proposalId),
     onSuccess: (data) => {
@@ -161,7 +158,6 @@ const StockBalancing = () => {
     rejectMutation.mutate(proposalId);
   };
 
-  // Fonction pour télécharger les données en JSON
   const downloadReport = (data: any, filename: string) => {
     const jsonStr = JSON.stringify(data, null, 2);
     const blob = new Blob([jsonStr], { type: 'application/json' });
@@ -175,37 +171,28 @@ const StockBalancing = () => {
     URL.revokeObjectURL(url);
   };
 
+  const hasPendingProposals = pendingProposals && pendingProposals.length > 0;
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4 sm:p-6 lg:p-8">
-      <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-4">Équilibrage des Stocks & Rapports</h1>
+      <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-4">Recommandations de transfert</h1>
       <p className="text-lg text-gray-600 dark:text-gray-300 mb-8">
-        Générez des recommandations de transferts de stock basées sur les ventes et les seuils MIN/MAX, et consultez des rapports détaillés.
+        Optimisation automatique des stocks
       </p>
 
-      <Card className="mb-8">
-        <CardHeader>
-          <CardTitle>Générer les Rapports d'Équilibrage</CardTitle>
-          <CardDescription>
-            Cliquez sur le bouton ci-dessous pour lancer l'analyse et obtenir les recommandations de transferts.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button onClick={handleGenerateReport} disabled={isLoadingReport}>
-            {isLoadingReport ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <RefreshCw className="mr-2 h-4 w-4" />
-            )}
-            Générer les Rapports
-          </Button>
-        </CardContent>
-      </Card>
+      <div className="flex justify-end mb-8">
+        <Button onClick={handleGenerateReport} disabled={isLoadingReport} className="bg-green-600 hover:bg-green-700 text-white">
+          {isLoadingReport ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          ) : (
+            <RefreshCw className="mr-2 h-4 w-4" />
+          )}
+          Nouvelle analyse
+        </Button>
+      </div>
 
-      <Separator className="my-8" />
+      {report && <StockBalancingSummary report={report} />}
 
-      {report && <StockBalancingSummary report={report} />} {/* Nouveau composant de résumé */}
-
-      {/* Propositions de Transfert en Attente */}
       <Card className="mb-8">
         <CardHeader>
           <CardTitle>Propositions de Transfert en Attente</CardTitle>
@@ -218,8 +205,19 @@ const StockBalancing = () => {
             </div>
           ) : errorPendingProposals ? (
             <p className="text-red-500 text-center">Erreur de chargement des propositions de transfert.</p>
-          ) : !pendingProposals || pendingProposals.length === 0 ? (
-            <p className="text-gray-500 text-center">Aucune proposition de transfert en attente pour le moment.</p>
+          ) : !hasPendingProposals ? (
+            <div className="text-center p-4">
+              <p className="text-gray-500 dark:text-gray-400 mb-4">Aucune recommandation disponible</p>
+              <p className="text-gray-600 dark:text-gray-300 mb-6">Générez une analyse pour obtenir des recommandations d'équilibrage</p>
+              <Button onClick={handleGenerateReport} disabled={isLoadingReport} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                {isLoadingReport ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                )}
+                Analyser maintenant
+              </Button>
+            </div>
           ) : (
             <div className="overflow-x-auto rounded-md border">
               <Table>
@@ -276,7 +274,6 @@ const StockBalancing = () => {
 
       {report && (
         <div className="space-y-8">
-          {/* Recommandations de Transfert (historique des dernières générées) */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
@@ -323,7 +320,6 @@ const StockBalancing = () => {
 
           <Separator />
 
-          {/* Résumé par Boutique */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
@@ -368,7 +364,6 @@ const StockBalancing = () => {
 
           <Separator />
 
-          {/* Articles à Rééquilibrer */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <div>

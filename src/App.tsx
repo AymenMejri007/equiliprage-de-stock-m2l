@@ -12,9 +12,10 @@ import GlobalStockList from "./pages/GlobalStockList";
 import ImportStock from "./pages/ImportStock";
 import StockBalancing from "./pages/StockBalancing";
 import Login from "./pages/Login";
+import TestDeDonnees from "./pages/TestDeDonnees"; // Import de la nouvelle page
 import { AppLayout } from "./components/layout/AppLayout";
 import { SessionContextProvider } from "./components/auth/SessionContextProvider";
-import AdminRouteWrapper from "./components/auth/AdminRouteWrapper"; // Importez le AdminRouteWrapper
+import AdminRouteWrapper from "./components/auth/AdminRouteWrapper";
 
 const queryClient = new QueryClient();
 
@@ -33,6 +34,7 @@ const App = () => (
               <Route path="reports" element={<Reports />} />
               <Route path="boutique-detail" element={<BoutiqueDetail />} />
               <Route path="global-stock" element={<GlobalStockList />} />
+              <Route path="test-de-donnees" element={<TestDeDonnees />} /> {/* Nouvelle route */}
               {/* Routes protégées par AdminRouteWrapper */}
               <Route element={<AdminRouteWrapper />}>
                 <Route path="import-stock" element={<ImportStock />} />

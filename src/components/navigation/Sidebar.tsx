@@ -1,10 +1,8 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { Home, LayoutDashboard, FileText, Store, List, Upload, Menu, GitCompareArrows, LogOut } from 'lucide-react';
+import { Home, LayoutDashboard, FileText, Store, List, Upload, GitCompareArrows, LogOut } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
-import { useIsMobile } from '@/hooks/use-mobile';
 import { useSession } from '@/components/auth/SessionContextProvider';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
@@ -13,7 +11,7 @@ interface NavLinkItem {
   to: string;
   icon: React.ElementType;
   label: string;
-  adminOnly?: boolean; // Ajout d'une propriété pour les liens admin
+  adminOnly?: boolean;
 }
 
 const navLinks: NavLinkItem[] = [
@@ -22,11 +20,11 @@ const navLinks: NavLinkItem[] = [
   { to: "/reports", icon: FileText, label: "Rapports" },
   { to: "/boutique-detail", icon: Store, label: "Détail Boutique" },
   { to: "/global-stock", icon: List, label: "Stock Global" },
-  { to: "/import-stock", icon: Upload, label: "Importer Stock", adminOnly: true }, // Admin seulement
-  { to: "/stock-balancing", icon: GitCompareArrows, label: "Équilibrage Stock", adminOnly: true }, // Admin seulement
+  { to: "/import-stock", icon: Upload, label: "Importer Stock", adminOnly: true },
+  { to: "/stock-balancing", icon: GitCompareArrows, label: "Équilibrage Stock", adminOnly: true },
 ];
 
-const SidebarContent: React.FC = () => {
+export const SidebarContent: React.FC = () => {
   const { session, userRole } = useSession();
   const isAdmin = userRole === 'admin';
 
@@ -42,7 +40,7 @@ const SidebarContent: React.FC = () => {
   return (
     <nav className="flex flex-col gap-2 p-4">
       {navLinks.map((link) => (
-        (!link.adminOnly || isAdmin) && ( // Afficher le lien seulement si non adminOnly ou si l'utilisateur est admin
+        (!link.adminOnly || isAdmin) && (
           <NavLink
             key={link.to}
             to={link.to}
@@ -72,39 +70,7 @@ const SidebarContent: React.FC = () => {
   );
 };
 
+// Le composant Sidebar lui-même est maintenant vide car son contenu est exporté et son déclencheur est dans Header.
 export const Sidebar: React.FC = () => {
-  const isMobile = useIsMobile();
-
-  if (isMobile) {
-    return (
-      <Sheet>
-        <SheetTrigger asChild>
-          <Button variant="outline" size="icon" className="shrink-0 md:hidden">
-            <Menu className="h-5 w-5" />
-            <span className="sr-only">Toggle navigation menu</span>
-          </Button>
-        </SheetTrigger>
-        <SheetContent side="left" className="flex flex-col">
-          <h2 className="text-lg font-semibold p-4 text-gray-900 dark:text-gray-100">Navigation</h2>
-          <SidebarContent />
-        </SheetContent>
-      </Sheet>
-    );
-  }
-
-  return (
-    <div className="hidden border-r bg-gray-100/40 md:block dark:bg-gray-800/40">
-      <div className="flex h-full max-h-screen flex-col gap-2">
-        <div className="flex h-14 items-center border-b px-4 lg:h-[60px] lg:px-6">
-          <NavLink to="/" className="flex items-center gap-2 font-semibold text-gray-900 dark:text-gray-100">
-            <Home className="h-6 w-6" />
-            <span className="">Stock App</span>
-          </NavLink>
-        </div>
-        <div className="flex-1">
-          <SidebarContent />
-        </div>
-      </div>
-    </div>
-  );
+  return null; // Ne rend rien pour le bureau, la logique mobile est gérée dans Header
 };
